@@ -126,21 +126,20 @@
         <form class="code-card" id="codeForm" novalidate autocomplete="off">
           <img class="code-icon" src="./apple-touch-icon.png" alt="" width="56" height="56" />
           <h2 class="code-title" id="codeDialogTitle">Datei ist geschützt.</h2>
-          <p class="code-text" id="codeDialogText">Bitte 6-stelligen Code eingeben.</p>
+          <p class="code-text" id="codeDialogText">Bitte Code eingeben.</p>
+          <p class="code-hint" id="codeHint" hidden>6–10 Zeichen, Buchstaben und Zahlen</p>
           <input
             id="codeInput"
             class="code-input"
             type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            maxlength="6"
+            maxlength="10"
             autocomplete="off"
             autocorrect="off"
             autocapitalize="off"
             spellcheck="false"
             enterkeyhint="done"
-            aria-label="6-stelliger Code"
-            aria-describedby="codeError"
+            aria-label="Code"
+            aria-describedby="codeHint codeError"
           />
           <p class="code-error" id="codeError" aria-live="assertive"></p>
           <div class="code-actions">
@@ -160,7 +159,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.2.3</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.3</p>
         </div>
       </div>
 

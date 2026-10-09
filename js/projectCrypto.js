@@ -15,7 +15,10 @@
 
 export const MANIFEST_NAME = 'bauteile-suchen.json';
 export const PAYLOAD_NAME = 'projekt.enc';
-export const CODE_LENGTH = 6;
+export const CODE_MIN_LENGTH = 6;
+export const CODE_MAX_LENGTH = 10;
+/** @deprecated use CODE_MAX_LENGTH — kept for any external readers */
+export const CODE_LENGTH = CODE_MAX_LENGTH;
 
 const FORMAT = 'bauteile-suchen-encrypted';
 const FORMAT_VERSION = 1;
@@ -47,8 +50,18 @@ function rand(n) {
   return crypto.getRandomValues(new Uint8Array(n));
 }
 
+/** Letters (incl. äöüÄÖÜß) + digits, 6–10 chars, case-sensitive. NFC-normalized. */
 export function isValidCode(code) {
-  return new RegExp(`^\\d{${CODE_LENGTH}}$`).test(String(code || ''));
+  const s = String(code || '').normalize('NFC');
+  return /^[A-Za-z0-9äöüÄÖÜß]{6,10}$/u.test(s);
+}
+
+/** Strip illegal chars and clamp length (NFC). */
+export function sanitizeCodeInput(raw) {
+  return String(raw || '')
+    .normalize('NFC')
+    .replace(/[^A-Za-z0-9äöüÄÖÜß]/gu, '')
+    .slice(0, CODE_MAX_LENGTH);
 }
 
 // ---------------------------------------------------------------- IndexedDB
@@ -96,7 +109,8 @@ export async function forgetMasterKey() {
 /** Code → non-extractable HKDF master key. Raw bits only live briefly in memory. */
 export async function deriveMasterKey(code) {
   if (!isValidCode(code)) throw new Error('Ungültiger Code');
-  const pw = await crypto.subtle.importKey('raw', enc.encode(String(code)), 'PBKDF2', false, ['deriveBits']);
+  const normalized = String(code).normalize('NFC');
+  const pw = await crypto.subtle.importKey('raw', enc.encode(normalized), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(MASTER_SALT_LABEL), iterations: PBKDF2_ITERATIONS },
     pw,

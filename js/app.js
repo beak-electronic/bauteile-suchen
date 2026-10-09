@@ -25,10 +25,10 @@ import {
   encryptProjectZip,
   decryptProjectZip,
   isValidCode,
-  CODE_LENGTH,
+  sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.2.3';
+const VERSION = 'V1.3';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -2090,6 +2090,7 @@ async function saveProject() {
       const code = await showCodeSetDialog({
         text: 'Code für geschützte Dateien eingeben',
         confirmText: 'Code zur Bestätigung wiederholen',
+        showHint: true,
       });
       if (!code) {
         setStatus('Sichern abgebrochen.');
@@ -2186,7 +2187,7 @@ async function unlockEncryptedProject(outer, manifest) {
     master = null;
     const ok = await showCodeDialog({
       title: 'Datei ist geschützt.',
-      text: 'Bitte 6-stelligen Code eingeben.',
+      text: 'Bitte Code eingeben.',
       onSuccess: () => {
         // Hide welcome under the dialog before it closes — avoids a flash of the
         // welcome screen between dialog dismiss and project load completing.
@@ -2231,11 +2232,11 @@ function clearCodeSuccess(form, okBtn) {
 }
 
 /**
- * Modal 6-digit code dialog. `verify(code)` → true closes with OK, false = „Code falsch“.
+ * Modal code dialog (6–10 alphanumeric). `verify(code)` → true closes with OK, false = „Code falsch“.
  * Optional `onSuccess()` runs after verify OK, before the green hold (e.g. hide welcome).
  * @returns {Promise<boolean>} true = OK & verified, false = Abbrechen
  */
-function showCodeDialog({ title, text, verify, onSuccess }) {
+function showCodeDialog({ title, text, verify, onSuccess, showHint = false }) {
   const dlg = document.getElementById('codeDialog');
   const form = document.getElementById('codeForm');
   const input = document.getElementById('codeInput');
@@ -2244,6 +2245,7 @@ function showCodeDialog({ title, text, verify, onSuccess }) {
   const cancelBtn = document.getElementById('codeCancel');
   const titleEl = document.getElementById('codeDialogTitle');
   const textEl = document.getElementById('codeDialogText');
+  const hintEl = document.getElementById('codeHint');
   if (title) {
     titleEl.textContent = title;
     titleEl.hidden = false;
@@ -2257,6 +2259,7 @@ function showCodeDialog({ title, text, verify, onSuccess }) {
     textEl.hidden = !text;
     form.classList.add('title-only');
   }
+  if (hintEl) hintEl.hidden = !showHint;
   if (codeDialogBusy) return Promise.resolve(false);
   codeDialogBusy = true;
   input.value = '';
@@ -2298,16 +2301,17 @@ function showCodeDialog({ title, text, verify, onSuccess }) {
       input.value = '';
     };
     const onInput = () => {
-      const digits = input.value.replace(/\D+/g, '').slice(0, CODE_LENGTH);
-      if (digits !== input.value) input.value = digits;
+      const cleaned = sanitizeCodeInput(input.value);
+      if (cleaned !== input.value) input.value = cleaned;
       if (err.textContent && !input.disabled && input.value) err.textContent = '';
     };
     const onSubmit = async (ev) => {
       ev.preventDefault();
       if (checking || input.disabled) return;
-      const code = input.value;
+      const code = sanitizeCodeInput(input.value);
+      input.value = code;
       if (!isValidCode(code)) {
-        fail(`Bitte ${CODE_LENGTH} Ziffern eingeben`);
+        fail('Bitte 6–10 Zeichen (Buchstaben und Zahlen) eingeben');
         input.focus();
         return;
       }
@@ -2360,10 +2364,10 @@ function showCodeDialog({ title, text, verify, onSuccess }) {
 
 /**
  * Two-step code entry (enter + repeat). Never persists the code itself — caller derives a key.
- * @returns {Promise<string|null>} matching 6-digit code, or null if Abbrechen
+ * @returns {Promise<string|null>} matching code, or null if Abbrechen
  */
-function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
-  const step1Text = text || 'Neuen 6-stelligen Code eingeben.';
+function showCodeSetDialog({ title, text, confirmText, mismatchText, showHint = true } = {}) {
+  const step1Text = text || 'Neuen Code eingeben';
   const step2Text = confirmText || 'Code zur Bestätigung wiederholen';
   const mismatch = mismatchText || 'Codes stimmen nicht überein';
   const dlg = document.getElementById('codeDialog');
@@ -2374,7 +2378,8 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
   const cancelBtn = document.getElementById('codeCancel');
   const titleEl = document.getElementById('codeDialogTitle');
   const textEl = document.getElementById('codeDialogText');
-  const applyPrompt = (prompt) => {
+  const hintEl = document.getElementById('codeHint');
+  const applyPrompt = (prompt, { hint } = {}) => {
     if (title) {
       titleEl.textContent = title;
       titleEl.hidden = false;
@@ -2388,8 +2393,9 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
       textEl.hidden = false;
       form.classList.add('title-only');
     }
+    if (hintEl) hintEl.hidden = !hint;
   };
-  applyPrompt(step1Text);
+  applyPrompt(step1Text, { hint: !!showHint });
   if (codeDialogBusy) return Promise.resolve(null);
   codeDialogBusy = true;
   input.value = '';
@@ -2425,16 +2431,17 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
       input.value = '';
     };
     const onInput = () => {
-      const digits = input.value.replace(/\D+/g, '').slice(0, CODE_LENGTH);
-      if (digits !== input.value) input.value = digits;
+      const cleaned = sanitizeCodeInput(input.value);
+      if (cleaned !== input.value) input.value = cleaned;
       if (err.textContent && input.value) err.textContent = '';
     };
     const onSubmit = (ev) => {
       ev.preventDefault();
       if (input.disabled) return;
-      const code = input.value;
+      const code = sanitizeCodeInput(input.value);
+      input.value = code;
       if (!isValidCode(code)) {
-        shake(`Bitte ${CODE_LENGTH} Ziffern eingeben`);
+        shake('Bitte 6–10 Zeichen (Buchstaben und Zahlen) eingeben');
         input.focus();
         return;
       }
@@ -2442,14 +2449,14 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
         first = code;
         input.value = '';
         err.textContent = '';
-        applyPrompt(step2Text);
+        applyPrompt(step2Text, { hint: false });
         input.focus();
         return;
       }
       if (code !== first) {
         first = null;
         shake(mismatch);
-        applyPrompt(step1Text);
+        applyPrompt(step1Text, { hint: !!showHint });
         input.focus();
         return;
       }
@@ -2797,8 +2804,9 @@ document.getElementById('menuChangeCode')?.addEventListener('click', async () =>
   try {
     const code = await showCodeSetDialog({
       title: 'Code ändern',
-      text: 'Neuen 6-stelligen Code eingeben.',
+      text: 'Neuen Code eingeben',
       confirmText: 'Code zur Bestätigung wiederholen',
+      showHint: true,
     });
     if (!code) {
       showToast('Code ändern abgebrochen.');

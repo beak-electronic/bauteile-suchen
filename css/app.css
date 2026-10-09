@@ -976,23 +976,30 @@ button, input { font: inherit; color: inherit; }
   font-weight: 700;
   color: var(--text);
 }
+.code-hint {
+  margin: -8px 0 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--muted, #6b7280);
+}
+.code-hint[hidden] { display: none !important; }
 .code-input {
   display: block;
   width: 100%;
   max-width: 280px;
   margin: 0 auto;
   min-height: 56px;
-  padding: 8px 10px 8px calc(10px + 0.45em); /* letter-spacing trails the last digit */
-  font-size: 1.8rem; /* ≥16px: no iOS auto-zoom on focus */
+  padding: 8px 12px;
+  font-size: 1.15rem; /* ≥16px: no iOS auto-zoom on focus */
   font-weight: 700;
-  letter-spacing: 0.45em;
+  letter-spacing: 0.12em;
   text-align: center;
-  font-variant-numeric: tabular-nums;
   color: var(--text);
   border: 2px solid var(--border);
   border-radius: 12px;
   background: #fff;
-  -webkit-text-security: disc; /* masked like a PIN, keeps inputmode=numeric keypad */
+  -webkit-text-security: disc; /* masked PIN-style; text keyboard for letters+digits */
   caret-color: var(--accent);
 }
 .code-input::placeholder { color: #d1d5db; }
@@ -1097,6 +1104,7 @@ button, input { font: inherit; color: inherit; }
   }
   .code-title { color: #e8eef4; }
   .code-text { color: #8b9aab; }
+  .code-hint { color: #8b9aab; }
   .code-card.title-only .code-text { color: #e8eef4; }
   .code-input {
     background: #0f1419;
