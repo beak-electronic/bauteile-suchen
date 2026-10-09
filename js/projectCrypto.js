@@ -8,7 +8,8 @@
  *
  * Keys:
  *   master   = PBKDF2-SHA256(code, app-wide salt, 600k) → 256 bit → imported as NON-extractable HKDF key.
- *              Only this CryptoKey is kept on the device (IndexedDB). The code itself is never stored.
+ *              Only this CryptoKey is kept on the device (IndexedDB), plus a device verifier
+ *              (AES-GCM of a fixed check string under an HKDF-derived subkey). The code itself is never stored.
  *   file key = HKDF-SHA256(master, random 16-byte salt per file, info) → AES-256-GCM (non-extractable).
  *   Each file gets a fresh salt; payload and key check each use their own random 12-byte IV.
  */
@@ -31,6 +32,10 @@ const CHECK_PLAINTEXT = 'bauteile-suchen key check v1';
 const DB_NAME = 'bauteile-suchen-keys';
 const DB_STORE = 'keys';
 const DB_KEY = 'master-v1';
+const DB_VERIFIER_KEY = 'device-verifier-v1';
+const DEVICE_VERIFIER_SALT = 'bauteile-suchen/device-verifier-salt/v1';
+const DEVICE_VERIFIER_INFO = 'bauteile-suchen/device-verifier/v1';
+const DEVICE_CHECK_PLAINTEXT = 'bauteile-suchen device check v1';
 
 const enc = new TextEncoder();
 
@@ -98,11 +103,92 @@ export async function getStoredMasterKey() {
     return null;
   }
 }
+function deviceAesKey(master) {
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: enc.encode(DEVICE_VERIFIER_SALT),
+      info: enc.encode(DEVICE_VERIFIER_INFO),
+    },
+    master,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+/** Build AES-GCM verifier blob for a master key (never stores the code). */
+export async function createDeviceVerifier(master) {
+  const key = await deviceAesKey(master);
+  const iv = rand(12);
+  const data = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    enc.encode(DEVICE_CHECK_PLAINTEXT),
+  );
+  return { v: 1, iv: b64(iv), data: b64(data) };
+}
+
+export async function getDeviceVerifier() {
+  try {
+    const v = await dbOp('readonly', (s) => s.get(DB_VERIFIER_KEY));
+    return v && typeof v === 'object' && v.iv && v.data ? v : null;
+  } catch (e) {
+    console.warn('Verifier nicht lesbar', e);
+    return null;
+  }
+}
+
+export async function storeDeviceVerifier(verifier) {
+  await dbOp('readwrite', (s) => s.put(verifier, DB_VERIFIER_KEY));
+}
+
+/** true if `master` decrypts the device verifier. */
+export async function verifyDeviceVerifier(master, verifier) {
+  if (!master || !verifier?.iv || !verifier?.data) return false;
+  try {
+    const key = await deviceAesKey(master);
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: unb64(verifier.iv) },
+      key,
+      unb64(verifier.data),
+    );
+    return new TextDecoder().decode(pt) === DEVICE_CHECK_PLAINTEXT;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure a device verifier exists for `master`.
+ * Legacy installs (key without verifier): create one from the stored non-extractable key
+ * (PBKDF2 salt is app-wide fixed, so later code entry can be checked the same way).
+ */
+export async function ensureDeviceVerifier(master) {
+  if (!master) return null;
+  const existing = await getDeviceVerifier();
+  if (existing && (await verifyDeviceVerifier(master, existing))) return existing;
+  const created = await createDeviceVerifier(master);
+  await storeDeviceVerifier(created);
+  return created;
+}
+
 export async function storeMasterKey(key) {
   await dbOp('readwrite', (s) => s.put(key, DB_KEY));
+  // Always (re)write verifier so Code ändern can prove the current code.
+  try {
+    await storeDeviceVerifier(await createDeviceVerifier(key));
+  } catch (e) {
+    console.warn('Device-Verifier konnte nicht gespeichert werden', e);
+  }
 }
+
 export async function forgetMasterKey() {
-  await dbOp('readwrite', (s) => s.delete(DB_KEY));
+  await dbOp('readwrite', (s) => {
+    s.delete(DB_KEY);
+    s.delete(DB_VERIFIER_KEY);
+  });
 }
 
 // ---------------------------------------------------------------- KDF

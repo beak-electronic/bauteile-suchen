@@ -28,13 +28,16 @@ import {
   forgetMasterKey,
   deriveMasterKey,
   verifyMasterKey,
+  ensureDeviceVerifier,
+  getDeviceVerifier,
+  verifyDeviceVerifier,
   encryptProjectZip,
   decryptProjectZip,
   isValidCode,
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.4.2';
+const VERSION = 'V1.5';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -50,6 +53,9 @@ const el = {
   chrome: document.getElementById('chrome'),
   menuBackdrop: document.getElementById('menuBackdrop'),
   drawer: document.getElementById('drawer'),
+  drawerMain: document.getElementById('drawerMain'),
+  drawerEdit: document.getElementById('drawerEdit'),
+  drawerStack: document.getElementById('drawerStack'),
   search: document.getElementById('searchInput'),
   suggestions: document.getElementById('suggestions'),
   boardWrap: document.getElementById('boardWrap'),
@@ -125,6 +131,7 @@ const state = {
   searchHit: null,
   crosshair: null, // {x,y} image px for searched part
   menuOpen: false,
+  editMenuOpen: false,
   pendingFit: true,
   welcomeDismissed: false,
   variantPickerOpen: false,
@@ -171,6 +178,34 @@ const IS_IOS_TOUCH = document.documentElement.classList.contains('ios-touch');
 const PERF = IS_IOS_TOUCH
   ? { baseMaxPx: 3e6, tileMaxPx: 7e6, tileMargin: 0.2, settleMs: 220, lowSmoothingWhileMoving: true }
   : { baseMaxPx: 16e6, tileMaxPx: 24e6, tileMargin: 0.5, settleMs: 140, lowSmoothingWhileMoving: false };
+
+/** Touch UI (iPhone/iPad / coarse pointer). */
+function isTouchUi() {
+  return IS_IOS_TOUCH || window.matchMedia('(pointer: coarse)').matches;
+}
+function orientBucket() {
+  const typ = screen.orientation?.type;
+  if (typ) return String(typ).includes('landscape') ? 'landscape' : 'portrait';
+  return window.innerWidth >= window.innerHeight ? 'landscape' : 'portrait';
+}
+let lastOrientBucket = orientBucket();
+let touchOrientFitTimer = 0;
+function scheduleTouchOrientFit(_reason) {
+  if (!isTouchUi()) return;
+  clearTimeout(touchOrientFitTimer);
+  touchOrientFitTimer = setTimeout(() => {
+    touchOrientFitTimer = 0;
+    syncShellToViewport();
+    syncChromeOffset();
+    lastOrientBucket = orientBucket();
+    if (state.pageBitmap) {
+      state.pendingFit = true;
+      draw();
+      updateFitBtnVisibility();
+    }
+  }, 280);
+}
+
 const PDF_WHITE_THR = 245; // RGB >= thr → margin white
 const PDF_CROP_PAD = 4;
 
@@ -894,11 +929,25 @@ function restoreMeta() {
   } catch (_) {}
 }
 
+function showEditMenu(edit) {
+  state.editMenuOpen = !!edit;
+  el.drawer?.classList.toggle('edit-open', state.editMenuOpen);
+  if (el.drawerEdit) el.drawerEdit.setAttribute('aria-hidden', state.editMenuOpen ? 'false' : 'true');
+  if (el.drawerMain) el.drawerMain.setAttribute('aria-hidden', state.editMenuOpen ? 'true' : 'false');
+  if (state.editMenuOpen && el.drawerEdit) {
+    el.drawerEdit.scrollTop = 0;
+  } else if (el.drawerMain) {
+    el.drawerMain.scrollTop = 0;
+  }
+}
+
 function openMenu(open) {
   state.menuOpen = open;
   el.drawer.hidden = !open;
   el.menuBackdrop.hidden = !open;
   el.menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (!open) showEditMenu(false);
+  else showEditMenu(false); // always open on main menu
 }
 
 async function ensurePdfJs() {
@@ -2014,7 +2063,7 @@ async function startNewDocument() {
   state.welcomeDismissed = true;
   showWelcome(false);
   if (el.empty) el.empty.hidden = hasProjectContent();
-  setStatus('Neu — Menü → Bestückungsplan PDF / Pick & Place CSV laden oder Öffnen. Optional: SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.) / BG Stückl. laden (Lager-Stückl. Artikel-Bez.) (zeigt Lagerplatz).');
+  setStatus('Neu — Menü → Öffnen oder Erstellen → Editiermenü → Bestückungsplan PDF / Pick & Place CSV laden. Optional im Editiermenü: Stücklisten laden (zeigt Lagerplatz).');
 }
 
 
@@ -2106,11 +2155,11 @@ async function onPnpFile(file, { asNewVariant = false, renewVariant = false } = 
 
 
 
-/** Open: .zip + legacy .bsu (same ZIP content). Save: .zip only. */
+/** Open picker: .zip only (legacy .bsu still readable if opened another way). Save: .zip only. */
 const PROJECT_OPEN_TYPES = [
   {
     description: 'Bauteile Suchen Projekt (.zip)',
-    accept: { 'application/zip': ['.zip', '.bsu'] },
+    accept: { 'application/zip': ['.zip'] },
   },
 ];
 const PROJECT_SAVE_TYPES = [
@@ -2320,7 +2369,7 @@ function clearCodeSuccess(form, okBtn) {
  * Optional `onSuccess()` runs after verify OK, before the green hold (e.g. hide welcome).
  * @returns {Promise<boolean>} true = OK & verified, false = Abbrechen
  */
-function showCodeDialog({ title, text, verify, onSuccess, showHint = false }) {
+function showCodeDialog({ title, text, verify, onSuccess, showHint = false, successHold = true }) {
   const dlg = document.getElementById('codeDialog');
   const form = document.getElementById('codeForm');
   const input = document.getElementById('codeInput');
@@ -2415,11 +2464,13 @@ function showCodeDialog({ title, text, verify, onSuccess, showHint = false }) {
         } catch (e) {
           console.warn(e);
         }
-        paintCodeSuccess(form, okBtn);
-        cancelBtn.disabled = true;
-        await new Promise((r) => { lockTimer = setTimeout(r, CODE_SUCCESS_MS); });
-        cancelBtn.disabled = false;
-        clearCodeSuccess(form, okBtn);
+        if (successHold) {
+          paintCodeSuccess(form, okBtn);
+          cancelBtn.disabled = true;
+          await new Promise((r) => { lockTimer = setTimeout(r, CODE_SUCCESS_MS); });
+          cancelBtn.disabled = false;
+          clearCodeSuccess(form, okBtn);
+        }
         finish(true);
         return;
       }
@@ -2827,8 +2878,17 @@ el.canvas.addEventListener(
 window.addEventListener('resize', () => {
   syncShellToViewport();
   syncChromeOffset();
+  if (isTouchUi()) {
+    const next = orientBucket();
+    if (next !== lastOrientBucket) {
+      lastOrientBucket = next;
+      scheduleTouchOrientFit('resize-orient');
+      return;
+    }
+  }
   if (state.pageBitmap) {
-    state.pendingFit = false;
+    // Desktop / same-orientation resize: keep pan/zoom (no auto-fit)
+    if (!touchOrientFitTimer) state.pendingFit = false;
     draw();
     updateFitBtnVisibility();
   }
@@ -2837,6 +2897,14 @@ window.addEventListener('resize', () => {
 function onVisualViewportChange() {
   syncShellToViewport();
   syncChromeOffset();
+  if (isTouchUi()) {
+    const next = orientBucket();
+    if (next !== lastOrientBucket) {
+      lastOrientBucket = next;
+      scheduleTouchOrientFit('visualViewport');
+      return;
+    }
+  }
   if (state.pageBitmap) draw();
 }
 if (window.visualViewport) {
@@ -2847,6 +2915,12 @@ if (window.visualViewport) {
 // UI wiring
 el.menuBtn.addEventListener('click', () => openMenu(!state.menuOpen));
 el.menuBackdrop.addEventListener('click', () => openMenu(false));
+document.getElementById('menuEdit')?.addEventListener('click', () => {
+  showEditMenu(true);
+});
+document.getElementById('menuEditBack')?.addEventListener('click', () => {
+  showEditMenu(false);
+});
 document.addEventListener('pointerdown', (ev) => {
   if (!state.menuOpen) return;
   const t = ev.target;
@@ -2892,6 +2966,27 @@ if (el.flipPanel) el.flipPanel.addEventListener('click', (ev) => {
 document.getElementById('menuChangeCode')?.addEventListener('click', async () => {
   openMenu(false);
   try {
+    const existing = await getStoredMasterKey();
+    if (existing) {
+      // Legacy keys without verifier: create verifier from the stored non-extractable master
+      // (PBKDF2 uses a fixed app-wide salt, so a later code entry can be checked the same way).
+      await ensureDeviceVerifier(existing);
+      const okCurrent = await showCodeDialog({
+        title: 'Code ändern',
+        text: 'Aktuellen Code eingeben',
+        showHint: false,
+        successHold: false, // green success only after new code is confirmed
+        verify: async (code) => {
+          const candidate = await deriveMasterKey(code);
+          const verifier = await getDeviceVerifier();
+          return verifyDeviceVerifier(candidate, verifier);
+        },
+      });
+      if (!okCurrent) {
+        showToast('Code ändern abgebrochen.');
+        return;
+      }
+    }
     const code = await showCodeSetDialog({
       title: 'Code ändern',
       text: 'Neuen Code eingeben',
@@ -2903,7 +2998,7 @@ document.getElementById('menuChangeCode')?.addEventListener('click', async () =>
       return;
     }
     const master = await deriveMasterKey(code);
-    await storeMasterKey(master);
+    await storeMasterKey(master); // also replaces device verifier
     showToast('Neuer Code gespeichert. Gilt ab dem nächsten Sichern.');
   } catch (e) {
     console.error(e);
@@ -2928,7 +3023,7 @@ document.getElementById('menuAbout').addEventListener('click', () => {
 © BEAK electronic engineering GmbH & Co. KG
 
 Menü → Datei öffnen (Projekt .zip)
-oder Erstellen → Bestückungsplan PDF / Pick & Place CSV laden
+oder Erstellen → Editiermenü → Bestückungsplan PDF / Pick & Place CSV laden
 Bestückungsvarianten: weitere Pick & Place CSV-Dateien hinzufügen
 Stücklisten (optional): Lagerplatz zur BEAK-Nr. im Suchfeld`);
 });
@@ -3104,6 +3199,16 @@ if (el.variantCurrentBtn) {
 
 document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
+  if (state.menuOpen && state.editMenuOpen) {
+    showEditMenu(false);
+    ev.preventDefault();
+    return;
+  }
+  if (state.menuOpen) {
+    openMenu(false);
+    ev.preventDefault();
+    return;
+  }
   if (state.flipPanelOpen) {
     hideFlipPanel();
     ev.preventDefault();
@@ -3130,7 +3235,13 @@ if ('serviceWorker' in navigator) {
 }
 
 syncChromeOffset();
-window.addEventListener('orientationchange', () => setTimeout(() => { syncShellToViewport(); syncChromeOffset(); if (state.pageBitmap) draw(); }, 50));
+
+window.addEventListener('orientationchange', () => {
+  scheduleTouchOrientFit('orientationchange');
+});
+if (screen.orientation && typeof screen.orientation.addEventListener === 'function') {
+  screen.orientation.addEventListener('change', () => scheduleTouchOrientFit('screen.orientation'));
+}
 
 window.addEventListener('resize', positionSuggestions);
 window.addEventListener('scroll', positionSuggestions, true);

@@ -212,21 +212,40 @@ button, input { font: inherit; color: inherit; }
   left: 8px;
   z-index: 60;
   width: min(340px, 94vw);
-  /* Use nearly all space below topbar; scrollbar only when content exceeds */
+  /* Use nearly all space below topbar; panels scroll internally (slide stack) */
   max-height: calc(100dvh - var(--safe-top) - 44px - 16px);
-  overflow: auto;
+  overflow: hidden;
   /* Same frosted glass as search field — own layer for live Safari re-sample */
   background: rgba(255, 255, 255, 0.55);
   -webkit-backdrop-filter: blur(8px) saturate(1.1);
   backdrop-filter: blur(8px) saturate(1.1);
   border: 1px solid rgba(216, 221, 230, 0.65);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 0;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
 }
 
+.drawer-stack {
+  display: flex;
+  width: 200%;
+  transition: transform 0.28s ease;
+  will-change: transform;
+}
+.drawer.edit-open .drawer-stack {
+  transform: translateX(-50%);
+}
+.drawer-panel {
+  flex: 0 0 50%;
+  width: 50%;
+  box-sizing: border-box;
+  padding: 12px;
+  max-height: calc(100dvh - var(--safe-top) - 44px - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .drawer-section {
   color: var(--muted);
   text-transform: uppercase;
@@ -235,7 +254,45 @@ button, input { font: inherit; color: inherit; }
   font-size: 0.75rem;
   font-weight: 700;
 }
-.drawer-section:first-child { margin-top: 0; }
+.drawer-panel > .drawer-section:first-child,
+.drawer-panel > .drawer-subheader + .drawer-section { margin-top: 0; }
+
+.drawer-subheader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin: 0 0 10px;
+  flex-wrap: nowrap;
+}
+.drawer-back {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.drawer-subtitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn.drawer-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.btn.drawer-nav-btn .drawer-chevron {
+  flex: 0 0 auto;
+  opacity: 0.55;
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1;
+}
 
 .search-bar {
   padding: 10px 12px;
@@ -353,6 +410,9 @@ button, input { font: inherit; color: inherit; }
     top: calc(var(--safe-top) + 48px);
     max-height: calc(100dvh - var(--safe-top) - 48px - 16px);
   }
+  html:not(.ios-touch) .drawer-panel {
+    max-height: calc(100dvh - var(--safe-top) - 48px - 16px);
+  }
 }
 
 /* iPad (html.ipad, portrait + landscape): same single row as desktop, but touch-sized
@@ -410,6 +470,9 @@ button, input { font: inherit; color: inherit; }
   }
   html.ipad .drawer {
     top: calc(var(--safe-top) + var(--touch) + 8px);
+    max-height: calc(100dvh - var(--safe-top) - var(--touch) - 8px - 16px);
+  }
+  html.ipad .drawer-panel {
     max-height: calc(100dvh - var(--safe-top) - var(--touch) - 8px - 16px);
   }
 }

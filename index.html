@@ -55,31 +55,47 @@
         </header>
 
         <nav class="drawer" id="drawer" hidden aria-label="Menü">
-          <div class="drawer-section">Datei</div>
-          <button type="button" class="btn block primary" id="menuOpen">Öffnen</button>
-          <button type="button" class="btn block" id="menuNew">Neu</button>
-          <button type="button" class="btn block" id="menuSave">Sichern</button>
-          <button type="button" class="btn block" id="menuClose">Schließen</button>
-          <div class="drawer-section">Erstellen</div>
-          <button type="button" class="btn block" id="menuPdf">Bestückungsplan PDF laden</button>
-          <button type="button" class="btn block" id="menuPnp">Pick &amp; Place CSV laden</button>
-          <div class="drawer-section">Bestückungsvarianten</div>
-          <button type="button" class="btn block" id="menuVariantPick">Variante wählen</button>
-          <button type="button" class="btn block" id="menuVariantRenew">Variante erneuern</button>
-          <button type="button" class="btn block" id="menuVariantAdd">Variante hinzufügen</button>
-          <button type="button" class="btn block" id="menuVariantRemove">Variante entfernen</button>
-          <button type="button" class="btn block" id="menuPnpReplace">Pick &amp; Place Werte mit Stückliste ersetzen (Kunden-Stückl. Referenz)</button>
-          <div class="drawer-section">Stücklisten</div>
-          <button type="button" class="btn block" id="menuBomSmd">SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
-          <button type="button" class="btn block" id="menuBomBg">BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
-          <div class="drawer-section">Kalibrierung</div>
-          <button type="button" class="btn block" id="menuSetRef">Referenzpunkt setzen</button>
-          <button type="button" class="btn block" id="menuMirrorCal">Kalibrierung spiegeln</button>
-          <button type="button" class="btn block" id="menuClearCal">Kalibrierung löschen</button>
-          <div class="drawer-section">Info</div>
-          <button type="button" class="btn block" id="menuAbout">Über / Version</button>
-          <button type="button" class="btn block" id="menuChangeCode">Code ändern</button>
-          <button type="button" class="btn block" id="menuForgetCode">Code auf diesem Gerät vergessen</button>
+          <div class="drawer-stack" id="drawerStack">
+            <div class="drawer-panel" id="drawerMain" data-menu="main">
+              <div class="drawer-section">Datei</div>
+              <button type="button" class="btn block primary" id="menuOpen">Öffnen</button>
+              <button type="button" class="btn block" id="menuVariantPick">Variante wählen</button>
+              <button type="button" class="btn block" id="menuClose">Schließen</button>
+              <div class="drawer-section">Erstellen</div>
+              <button type="button" class="btn block drawer-nav-btn" id="menuEdit" aria-haspopup="true">
+                <span>Editiermenü</span><span class="drawer-chevron" aria-hidden="true">›</span>
+              </button>
+              <div class="drawer-section">Info</div>
+              <button type="button" class="btn block" id="menuAbout">Über / Version</button>
+            </div>
+            <div class="drawer-panel" id="drawerEdit" data-menu="edit" aria-label="Editiermenü" aria-hidden="true">
+              <div class="drawer-subheader">
+                <button type="button" class="btn sm drawer-back" id="menuEditBack" aria-label="Zurück zum Menü">‹ Zurück</button>
+                <span class="drawer-subtitle" id="drawerEditTitle">Editiermenü</span>
+              </div>
+              <div class="drawer-section">Datei</div>
+              <button type="button" class="btn block" id="menuNew">Neu</button>
+              <button type="button" class="btn block primary" id="menuSave">Sichern</button>
+              <div class="drawer-section">Erstellen</div>
+              <button type="button" class="btn block" id="menuPdf">Bestückungsplan PDF laden</button>
+              <button type="button" class="btn block" id="menuPnp">Pick &amp; Place CSV laden</button>
+              <div class="drawer-section">Bestückungsvarianten</div>
+              <button type="button" class="btn block" id="menuVariantRenew">Variante erneuern</button>
+              <button type="button" class="btn block" id="menuVariantAdd">Variante hinzufügen</button>
+              <button type="button" class="btn block" id="menuVariantRemove">Variante entfernen</button>
+              <button type="button" class="btn block" id="menuPnpReplace">Pick &amp; Place Werte mit Stückliste ersetzen (Kunden-Stückl. Referenz)</button>
+              <div class="drawer-section">Stücklisten</div>
+              <button type="button" class="btn block" id="menuBomSmd">SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
+              <button type="button" class="btn block" id="menuBomBg">BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
+              <div class="drawer-section">Kalibrierung</div>
+              <button type="button" class="btn block" id="menuSetRef">Referenzpunkt setzen</button>
+              <button type="button" class="btn block" id="menuMirrorCal">Kalibrierung spiegeln</button>
+              <button type="button" class="btn block" id="menuClearCal">Kalibrierung löschen</button>
+              <div class="drawer-section">Code</div>
+              <button type="button" class="btn block" id="menuChangeCode">Code ändern</button>
+              <button type="button" class="btn block" id="menuForgetCode">Code auf diesem Gerät vergessen</button>
+            </div>
+          </div>
         </nav>
 
         <div class="search-bar">
@@ -116,7 +132,7 @@
           </div>
           <div class="empty-state" id="emptyState" hidden>
             <strong>Bauteile Suchen</strong>
-            <div>Menü → Datei öffnen (Projekt .zip)<br />oder Erstellen → Bestückungsplan PDF / Pick &amp; Place CSV laden</div>
+            <div>Menü → Datei öffnen (Projekt .zip)<br />oder Erstellen → Editiermenü → Bestückungsplan PDF / Pick &amp; Place CSV laden</div>
             <div class="empty-state-optional">Optional: Stücklisten → SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.) / BG Stückl. laden (Lager-Stückl. Artikel-Bez.) (zeigt Lagerplatz)</div>
           </div>
         </div>
@@ -160,7 +176,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.4.2</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5</p>
         </div>
       </div>
 
@@ -194,7 +210,7 @@
     <input class="hidden-file" id="variantInput" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" />
     <input class="hidden-file" id="bomInput" type="file" accept=".pdf,application/pdf,.csv,text/csv" />
     <input type="file" id="pnpReplaceInput" accept=".pdf,application/pdf" hidden />
-    <input class="hidden-file" id="bsuInput" type="file" accept=".zip,.ZIP,application/zip,application/x-zip-compressed,.bsu,.BSU,application/octet-stream" />
+    <input class="hidden-file" id="bsuInput" type="file" accept=".zip,.ZIP,application/zip,application/x-zip-compressed" />
 
     <script src="./vendor/jszip/jszip.min.js"></script>
     <script type="module" src="./js/app.js"></script>
