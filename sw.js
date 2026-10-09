@@ -1,5 +1,5 @@
 /* Bauteile Suchen service worker — cache shell for offline */
-const CACHE = 'bauteile-suchen-v1-5-2';
+const CACHE = 'bauteile-suchen-v1-5-3';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,8 @@ const ASSETS = [
   './favicon-32.png',
   './favicon-48.png',
   './apple-touch-icon.png',
+  './fonts/Aeonis.subset.ttf',
+  './fonts/Constantia-Bold.subset.ttf',
   './vendor/pdfjs/pdf.min.mjs',
   './vendor/pdfjs/pdf.worker.min.mjs',
 ];

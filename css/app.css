@@ -40,7 +40,7 @@ html, body {
   color: var(--text);
   overflow: hidden;
   overscroll-behavior: none;
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 button, input { font: inherit; color: inherit; }
@@ -690,7 +690,50 @@ button, input { font: inherit; color: inherit; }
 
 .hidden-file { display: none !important; }
 
-/* ==== Welcome screen (light theme, Anweisungen layout) ================== */
+/* ==== BEAK wordmark (from Geräte Laufzettel: Aeonis + Constantia bullet) ==== */
+@font-face {
+  font-family: "AeonisLogo";
+  src: url("../fonts/Aeonis.subset.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ConstantiaBullet";
+  src: url("../fonts/Constantia-Bold.subset.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+.app-beak {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.12em;
+  user-select: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+.app-beak .beak-letters {
+  font-family: "AeonisLogo", sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: #727272;
+  font-weight: 400;
+}
+.app-beak .beak-dot {
+  font-family: "ConstantiaBullet", Georgia, serif;
+  font-size: 15px;
+  color: var(--accent);
+  line-height: 1;
+  transform: translateY(0.5px);
+}
+@media (max-width: 380px) {
+  .app-beak .beak-letters,
+  .app-beak .beak-dot { font-size: 14px; }
+}
+
+/* ==== Welcome screen (light/dark, Anweisungen layout) ================== */
 .welcome-screen {
   position: fixed;
   inset: 0;
@@ -703,16 +746,30 @@ button, input { font: inherit; color: inherit; }
     radial-gradient(ellipse 80% 60% at 50% 30%, rgba(221, 0, 122, 0.12), transparent 55%),
     radial-gradient(ellipse 70% 50% at 80% 90%, rgba(59, 130, 246, 0.06), transparent 50%),
     #ffffff;
+  color: #1a1f27;
 }
 .welcome-screen[hidden] { display: none !important; }
 .welcome-card {
+  position: relative; /* anchor for in-card BEAK */
   width: min(420px, 94vw);
   background: #ffffff;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(26, 31, 39, 0.10);
   border-radius: 16px;
   padding: 28px 24px 22px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(221, 0, 122, 0.08);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.08);
   text-align: center;
+}
+/* BEAK inside card, top-right (does not affect card box size) */
+.welcome-card .welcome-beak {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  pointer-events: none;
+}
+.welcome-card .welcome-beak .beak-letters,
+.welcome-card .welcome-beak .beak-dot {
+  font-size: 14px; /* default balanced size; variants via inline override for shots */
 }
 .welcome-brand { margin-bottom: 22px; }
 .welcome-icon {
@@ -728,11 +785,11 @@ button, input { font: inherit; color: inherit; }
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: var(--text);
+  color: #1a1f27;
 }
 .welcome-sub {
   margin: 0;
-  color: var(--muted);
+  color: #6b7280;
   font-size: clamp(0.72rem, 3.5vw, 0.9rem);
   line-height: 1.4;
   white-space: nowrap;
@@ -751,6 +808,11 @@ button, input { font: inherit; color: inherit; }
   display: inline-flex;
   align-items: center;
 }
+.welcome-screen .welcome-btn:not(.primary) {
+  background: #f4f5f7;
+  border: 1px solid rgba(26, 31, 39, 0.10);
+  color: #1a1f27;
+}
 .welcome-btn.primary {
   background: var(--accent);
   border-color: var(--accent-border);
@@ -764,9 +826,38 @@ button, input { font: inherit; color: inherit; }
   margin: 16px 0 0;
   font-size: 0.72rem;
   line-height: 1.3;
-  color: var(--muted);
+  color: #6b7280;
   opacity: 0.85;
   letter-spacing: 0.02em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .welcome-screen {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 30%, rgba(221, 0, 122, 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 80% 90%, rgba(59, 130, 246, 0.08), transparent 50%),
+      #0b0b0d;
+    color: #f2f2f7;
+  }
+  .welcome-screen .app-beak .beak-letters {
+    color: #a1a1a6; /* slightly lighter gray on dark, same opacity feel as #727272 on light */
+  }
+  .welcome-card {
+    background: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  }
+  .welcome-title { color: #f2f2f7; }
+  .welcome-sub { color: #98989f; }
+  .welcome-version { color: #98989f; }
+  .welcome-screen .welcome-btn:not(.primary) {
+    background: #2c2c2e;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+  .welcome-icon {
+    box-shadow: 0 8px 28px rgba(221, 0, 122, 0.35);
+  }
 }
 
 /* Hide chrome while welcome is open (Anweisungen parity) */
