@@ -39,6 +39,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  overscroll-behavior: none;
   color-scheme: light;
 }
 
@@ -145,6 +146,12 @@ button, input { font: inherit; color: inherit; }
   min-width: 0;
   flex: 1;
 }
+/* Title sits in a plain wrapper div — it must grow so .title can use the row */
+.brand > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
 
 .title {
   font-size: 1.05rem;
@@ -152,7 +159,9 @@ button, input { font: inherit; color: inherit; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: min(52vw, 420px);
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none; /* stacked iPhone: use full brand row; desktop/iPad grid re-limits below */
 }
 
 
@@ -321,7 +330,13 @@ button, input { font: inherit; color: inherit; }
 }
 .search-lager-prefix { font-weight: 600; }
 /* Search text clips with … where it meets the Lagerplatz label */
-#searchInput { text-overflow: ellipsis; }
+#searchInput {
+  text-overflow: ellipsis;
+  font-size: 16px; /* ≥16px: no iOS focus zoom */
+}
+#searchInput:focus {
+  font-size: 16px !important; /* never shrink while typing */
+}
 .search-lager[hidden] { display: none !important; }
 
 .input {
@@ -479,6 +494,11 @@ button, input { font: inherit; color: inherit; }
 /* iPad portrait / narrower single row: show only the place, drop „Lagerplatz: “ */
 @media (min-width: 700px) and (orientation: portrait), (min-width: 700px) and (max-width: 1000px) {
   html.ipad .search-lager-prefix { display: none; }
+}
+
+/* iPhone (and any ios-touch) portrait: same — drop „Lagerplatz: “ to free search width */
+@media (orientation: portrait) {
+  html.ios-touch .search-lager-prefix { display: none; }
 }
 
 .suggestions[hidden] { display: none !important; }

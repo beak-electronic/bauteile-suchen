@@ -37,7 +37,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.5';
+const VERSION = 'V1.5.1';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -195,13 +195,16 @@ function scheduleTouchOrientFit(_reason) {
   clearTimeout(touchOrientFitTimer);
   touchOrientFitTimer = setTimeout(() => {
     touchOrientFitTimer = 0;
+    invalidateBoardLayout();
     syncShellToViewport();
     syncChromeOffset();
     lastOrientBucket = orientBucket();
     if (state.pageBitmap) {
       state.pendingFit = true;
-      draw();
+      draw(); // remasures canvas + applies fit
       updateFitBtnVisibility();
+      fitDocTitle();
+      fitSearchLabelFont();
     }
   }, 280);
 }
@@ -744,6 +747,7 @@ function updateSearchLager() {
   lab.hidden = !text;
   // Keep typed/label text clear of the overlay (input text is clipped with ellipsis)
   if (el.search) el.search.style.paddingRight = text ? `${Math.ceil(lab.offsetWidth) + 20}px` : '';
+  fitSearchLabelFont();
 }
 
 function setBoms(boms) {
@@ -891,7 +895,60 @@ function updateDocTitle() {
   if (el.docTitle) {
     el.docTitle.textContent = title;
     el.docTitle.title = title;
+    fitDocTitle();
   }
+}
+
+/** Shrink title font to fit available width (min 12px), then ellipsis if still needed. */
+function fitDocTitle() {
+  const node = el.docTitle;
+  if (!node) return;
+  node.style.fontSize = '';
+  const base = parseFloat(getComputedStyle(node).fontSize) || 16;
+  let size = base;
+  const min = 12;
+  // Allow layout to use full flex width first
+  while (node.scrollWidth > node.clientWidth + 0.5 && size > min) {
+    size = Math.max(min, size - 0.5);
+    node.style.fontSize = `${size}px`;
+  }
+}
+
+/**
+ * When the search field shows a confirmed part label (not focused), shrink font
+ * so the full label fits beside Lagerplatz (min 12px). Focused/typing stays ≥16px.
+ */
+function fitSearchLabelFont() {
+  const input = el.search;
+  if (!input) return;
+  if (document.activeElement === input) {
+    input.style.fontSize = '';
+    return;
+  }
+  // Only auto-shrink on iPhone/touch stacked UIs when a hit label is shown
+  const label = (input.value || '').trim();
+  if (!label || !state.searchHit) {
+    input.style.fontSize = '';
+    return;
+  }
+  input.style.fontSize = '16px';
+  const cs = getComputedStyle(input);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const avail = Math.max(8, input.clientWidth - padL - padR);
+  // Measure with canvas
+  const canvas = fitSearchLabelFont._c || (fitSearchLabelFont._c = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  let size = 16;
+  const min = 12;
+  const family = cs.fontFamily || 'system-ui';
+  const weight = cs.fontWeight || '400';
+  while (size > min) {
+    ctx.font = `${weight} ${size}px ${family}`;
+    if (ctx.measureText(label).width <= avail) break;
+    size -= 0.5;
+  }
+  input.style.fontSize = `${size}px`;
 }
 
 function updateBadges() {
@@ -1708,6 +1765,21 @@ function syncShellToViewport() {
   return h;
 }
 
+/** After rotate/resize: drop cached board size, kill stray scroll, remasure wrap. */
+function invalidateBoardLayout() {
+  lastBoardSize = null;
+  try {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    if (window.visualViewport && typeof window.visualViewport.offsetTop === 'number') {
+      // no-op read — some WebKit builds settle offset after access
+      void window.visualViewport.offsetTop;
+    }
+  } catch (_) {}
+  if (el.boardWrap) el.boardWrap.style.height = '';
+}
+
 /** Canvas/wrap CSS size — cover down to true shell bottom (no green letterbox). */
 function boardCssSize() {
   const wrap = el.boardWrap;
@@ -1829,10 +1901,30 @@ function drawInner() {
   }
 }
 
+/**
+ * Map viewport client coords → board CSS px (pan/zoom space).
+ * Always uses a live getBoundingClientRect and scales by the canvas logical
+ * size vs displayed size — after iPhone rotate, rect can briefly disagree with
+ * style/backing-store width, which used to offset taps far from the finger.
+ */
+function clientToBoardCss(clientX, clientY) {
+  const canvas = el.canvas;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = (canvas.width / dpr) || rect.width || 1;
+  const logicalH = (canvas.height / dpr) || rect.height || 1;
+  const dispW = rect.width || logicalW;
+  const dispH = rect.height || logicalH;
+  const scaleX = logicalW / dispW;
+  const scaleY = logicalH / dispH;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
 function screenToImage(clientX, clientY) {
-  const rect = el.canvas.getBoundingClientRect();
-  const sx = clientX - rect.left;
-  const sy = clientY - rect.top;
+  const { x: sx, y: sy } = clientToBoardCss(clientX, clientY);
   return {
     x: (sx - state.pan.x) / state.zoom,
     y: (sy - state.pan.y) / state.zoom,
@@ -2776,15 +2868,19 @@ el.canvas.addEventListener('pointermove', (ev) => {
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
     const midX = (a.x + b.x) / 2;
     const midY = (a.y + b.y) / 2;
-    const rect = el.canvas.getBoundingClientRect();
     const factor = dist / (pinch.dist || 1);
     const newZoom = Math.min(ZOOM_MAX, Math.max(0.05, pinch.zoom * factor));
-    const imgX = (pinch.midX - rect.left - pinch.panX) / pinch.zoom;
-    const imgY = (pinch.midY - rect.top - pinch.panY) / pinch.zoom;
+    const origin = clientToBoardCss(pinch.midX, pinch.midY);
+    // Recompute origin in the *current* display mapping for the moving midpoint
+    const now = clientToBoardCss(midX, midY);
+    const imgX = (origin.x - pinch.panX) / pinch.zoom;
+    const imgY = (origin.y - pinch.panY) / pinch.zoom;
+    // Use board-css of current midpoint for pan (same scale as logical canvas)
+    const midBoard = now;
     state.zoom = newZoom;
     state.pan = {
-      x: midX - rect.left - imgX * newZoom,
-      y: midY - rect.top - imgY * newZoom,
+      x: midBoard.x - imgX * newZoom,
+      y: midBoard.y - imgY * newZoom,
     };
     updateFitBtnVisibility();
     requestDraw();
@@ -2853,9 +2949,7 @@ el.canvas.addEventListener(
   (ev) => {
     if (!state.pageBitmap) return;
     ev.preventDefault();
-    const rect = el.canvas.getBoundingClientRect();
-    const mx = ev.clientX - rect.left;
-    const my = ev.clientY - rect.top;
+    const { x: mx, y: my } = clientToBoardCss(ev.clientX, ev.clientY);
     const imgX = (mx - state.pan.x) / state.zoom;
     const imgY = (my - state.pan.y) / state.zoom;
     const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
@@ -2876,8 +2970,11 @@ el.canvas.addEventListener(
 );
 
 window.addEventListener('resize', () => {
+  invalidateBoardLayout();
   syncShellToViewport();
   syncChromeOffset();
+  fitDocTitle();
+  fitSearchLabelFont();
   if (isTouchUi()) {
     const next = orientBucket();
     if (next !== lastOrientBucket) {
@@ -2895,6 +2992,7 @@ window.addEventListener('resize', () => {
 });
 
 function onVisualViewportChange() {
+  invalidateBoardLayout();
   syncShellToViewport();
   syncChromeOffset();
   if (isTouchUi()) {
@@ -2906,6 +3004,8 @@ function onVisualViewportChange() {
     }
   }
   if (state.pageBitmap) draw();
+  fitDocTitle();
+  fitSearchLabelFont();
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', onVisualViewportChange);
