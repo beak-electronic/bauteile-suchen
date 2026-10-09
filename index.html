@@ -68,6 +68,7 @@
           <button type="button" class="btn block" id="menuVariantRenew">Variante erneuern</button>
           <button type="button" class="btn block" id="menuVariantAdd">Variante hinzufügen</button>
           <button type="button" class="btn block" id="menuVariantRemove">Variante entfernen</button>
+          <button type="button" class="btn block" id="menuPnpReplace">Pick &amp; Place Werte mit Stückliste ersetzen</button>
           <div class="drawer-section">Stücklisten</div>
           <button type="button" class="btn block" id="menuBomSmd">SMD BG Stückliste laden</button>
           <button type="button" class="btn block" id="menuBomBg">BG Stückliste laden</button>
@@ -159,7 +160,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.3.1</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.4</p>
         </div>
       </div>
 
@@ -192,6 +193,7 @@
     <input class="hidden-file" id="pnpInput" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" />
     <input class="hidden-file" id="variantInput" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" />
     <input class="hidden-file" id="bomInput" type="file" accept=".pdf,application/pdf,.csv,text/csv" />
+    <input type="file" id="pnpReplaceInput" accept=".pdf,application/pdf" hidden />
     <input class="hidden-file" id="bsuInput" type="file" accept=".zip,.ZIP,application/zip,application/x-zip-compressed,.bsu,.BSU,application/octet-stream" />
 
     <script src="./vendor/jszip/jszip.min.js"></script>

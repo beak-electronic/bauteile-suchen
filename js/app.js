@@ -16,6 +16,12 @@ import {
 } from './projectBsu.js';
 import { parseBomPdf, parseBomCsv, normalizeBomList, buildBomLookup, beakKey } from './bom.js';
 import {
+  parseKundenBomPdf,
+  applyKundenValuesToParts,
+  serializeKundenByRef,
+  deserializeKundenByRef,
+} from './kundenBom.js';
+import {
   readEncryptedManifest,
   getStoredMasterKey,
   storeMasterKey,
@@ -28,7 +34,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.3.1';
+const VERSION = 'V1.4';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -54,6 +60,7 @@ const el = {
   variantInput: document.getElementById('variantInput'),
   bsuInput: document.getElementById('bsuInput'),
   bomInput: document.getElementById('bomInput'),
+  pnpReplaceInput: document.getElementById('pnpReplaceInput'),
   toast: document.getElementById('appToast'),
   searchLager: document.getElementById('searchLager'),
   menuSetRef: document.getElementById('menuSetRef'),
@@ -130,6 +137,8 @@ const state = {
   boms: { smd: null, bg: null },
   /** @type {Map<string, {lagerplatz:string, beschreibung:string, source:'smd'|'bg'}>} BEAK key → Lager */
   bomLookup: new Map(),
+  /** @type {{ sourceName?: string, byRef: Record<string,{value:string,beak:string,key:string}> }|null} */
+  pnpValueReplace: null,
 };
 
 let pdfjsLib = null;
@@ -738,6 +747,58 @@ async function onBomFile(file, source) {
   } catch (e) {
     console.error(e);
     showToast(`${label} konnte nicht geladen werden: ` + (e.message || e), 6000);
+  }
+}
+
+
+function applyPnpValueReplaceMap(byRef, { sync = true } = {}) {
+  const map = byRef instanceof Map ? byRef : deserializeKundenByRef(byRef);
+  for (const v of state.variants) {
+    if (v.parts?.length) applyKundenValuesToParts(v.parts, map);
+  }
+  if (sync) {
+    // Refresh visible parts from active variant / refs-only merge
+    if (state.activeVariantId === REFS_ONLY_ID) {
+      state.parts = mergeAllVariantParts();
+    } else {
+      const v = state.variants.find((x) => x.id === state.activeVariantId);
+      if (v) state.parts = v.parts || [];
+    }
+  }
+}
+
+async function onPnpReplaceFile(file) {
+  if (!file) return;
+  if (!state.variants.length && !state.parts.length) {
+    showToast('Bitte zuerst Pick & Place laden.', 5000);
+    return;
+  }
+  try {
+    const lib = await ensurePdfJs();
+    const parsed = await parseKundenBomPdf(lib, new Uint8Array(await file.arrayBuffer()));
+    if (!parsed.byRef?.size) {
+      showToast(`Keine Referenzen in Stückliste erkannt (${file.name})`, 6000);
+      return;
+    }
+    // Apply to all variants (Kunden-Stückliste is board-level); toast counts current view
+    applyPnpValueReplaceMap(parsed.byRef, { sync: true });
+    state.pnpValueReplace = {
+      sourceName: file.name,
+      byRef: serializeKundenByRef(parsed.byRef),
+    };
+    let replaced = 0;
+    const total = state.parts.length;
+    for (const part of state.parts) {
+      if (parsed.byRef.has(normalizeRef(part.id))) replaced++;
+    }
+    updateSearchLager();
+    draw();
+    const msg = `${replaced} von ${total} Werten ersetzt`;
+    setStatus(msg + (parsed.title ? ` — ${parsed.title}` : ''));
+    showToast(msg);
+  } catch (e) {
+    console.error(e);
+    showToast('Stückliste konnte nicht geladen werden: ' + (e.message || e), 6000);
   }
 }
 
@@ -1904,6 +1965,7 @@ async function clearLoadedDocument() {
   state.pnpText = '';
   state.variants = [];
   state.activeVariantId = null;
+  state.pnpValueReplace = null;
   state.pageBitmap = null;
   state.pageW = 0;
   state.pageH = 0;
@@ -1993,6 +2055,9 @@ async function onPnpFile(file, { asNewVariant = false, renewVariant = false } = 
     if (!renewActiveVariant(text, parts)) {
       setStatus('Keine aktive Variante zum Erneuern — zuerst Variante wählen.');
       return;
+    }
+    if (state.pnpValueReplace?.byRef) {
+      applyPnpValueReplaceMap(state.pnpValueReplace.byRef, { sync: true });
     }
     if (state.cal.cal1.calId && !parts.some((p) => p.id === state.cal.cal1.calId)) {
       if (!state.cal.cal2.calId || !parts.some((p) => p.id === state.cal.cal2.calId)) {
@@ -2134,6 +2199,7 @@ async function saveProject() {
       pageW: state.pageW,
       pageH: state.pageH,
       stuecklisten: state.boms.smd || state.boms.bg ? state.boms : null,
+      pnpValueReplace: state.pnpValueReplace,
     });
     const blob = await encryptProjectZip(innerZip, master);
     const fname = suggestedBsuFilename({
@@ -2569,6 +2635,12 @@ async function openProjectFile(file, { handle = null } = {}) {
     }
     // Stücklisten from project .zip replace current ones; older projects without → keep loaded lists
     if (loaded.stuecklisten) setBoms(loaded.stuecklisten);
+    if (loaded.pnpValueReplace?.byRef) {
+      state.pnpValueReplace = loaded.pnpValueReplace;
+      applyPnpValueReplaceMap(loaded.pnpValueReplace.byRef, { sync: false });
+    } else {
+      state.pnpValueReplace = null;
+    }
     syncActiveVariantParts();
     updateVariantBar();
     state.welcomeDismissed = true;
@@ -2980,6 +3052,22 @@ document.getElementById('menuVariantRemove')?.addEventListener('click', () => {
   }
   showVariantPicker('remove');
 });
+document.getElementById('menuPnpReplace')?.addEventListener('click', () => {
+  openMenu(false);
+  if (!state.variants.length && !state.parts.length) {
+    setStatus('Bitte zuerst Pick & Place laden.');
+    showToast('Bitte zuerst Pick & Place laden.', 4000);
+    return;
+  }
+  el.pnpReplaceInput?.click();
+});
+if (el.pnpReplaceInput) {
+  el.pnpReplaceInput.addEventListener('change', () => {
+    const f = el.pnpReplaceInput.files?.[0];
+    el.pnpReplaceInput.value = '';
+    void onPnpReplaceFile(f);
+  });
+}
 document.getElementById('menuBomSmd')?.addEventListener('click', () => {
   openMenu(false);
   bomFileSource = 'smd';

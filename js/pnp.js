@@ -60,20 +60,41 @@ export function formatBeakFromDescription(raw) {
   return beakListFromDescription(raw).join(' & ');
 }
 
+/** Format digit string as BEAK display: 3192 → 3.192, 101186 → 101.186. */
+export function formatBeakDigits(digits) {
+  const d = String(digits ?? '').replace(/\D+/g, '');
+  if (!d || /^0+$/.test(d)) return '';
+  if (d.length <= 3) return d;
+  const parts = [];
+  let s = d;
+  while (s.length > 3) {
+    parts.unshift(s.slice(-3));
+    s = s.slice(0, -3);
+  }
+  if (s) parts.unshift(s);
+  return parts.join('.');
+}
+
 /** Same as formatBeakFromDescription but as list: `5764+2071` → ['5.764', '2.071']. */
 export function beakListFromDescription(raw) {
   const s = String(raw ?? '').trim();
   if (!s) return [];
   const low = s.toLowerCase();
   if (low === '0000' || low === 'beak') return [];
-  const chunks = s.split('+').map((c) => c.trim()).filter(Boolean);
+  const chunks = s.split(/[+&]/).map((c) => c.trim()).filter(Boolean);
   if (!chunks.length) return [];
   const out = [];
   for (const c of chunks) {
     const cl = c.toLowerCase();
     if (cl === '0000' || cl === 'beak') continue;
-    if (!/^\d{4}$/.test(c)) return [];
-    out.push(`${c[0]}.${c.slice(1)}`);
+    // Already dotted (1.277 / 101.186)
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(c)) {
+      out.push(c);
+      continue;
+    }
+    const digits = c.replace(/\D+/g, '');
+    if (!/^\d{4,}$/.test(digits)) return [];
+    out.push(formatBeakDigits(digits));
   }
   return out;
 }

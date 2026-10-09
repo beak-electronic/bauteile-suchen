@@ -1,7 +1,7 @@
 # Bauteile Suchen
 
 Browser-PWA: Bauteil auf einem Bestückungsplan-PDF per pinkem Fadenkreuz finden.  
-Version **V1.3.1**. Lizenz: **GPLv3**.
+Version **V1.4**. Lizenz: **GPLv3**.
 
 Orientiert an der Kalibrierungs- und Pick & Place-Logik von Bestückungsplan (unabhängige App).
 
@@ -25,10 +25,11 @@ Oder Netlify Drop / GitHub Pages (`base` relativ, Manifest `id`/`start_url`/`sco
    - Zweites Bauteil (z. B. `FID2`) ebenso
 3. Bauteil suchen (z. B. `R1`) → pinkes Fadenkreuz (`#dd007a`, wie Button „Sichern“ in Bestückungsplan)
 4. Menü → **Bestückungsvarianten**: Variante wählen / hinzufügen / entfernen (Name = Dateiname ohne Endung)
-5. Optional Menü → **Stücklisten** → **SMD BG Stückliste laden** / **BG Stückliste laden** (PDF „Lager - Stückliste“):
+5. Menü → **Bestückungsvarianten** → **Pick & Place Werte mit Stückliste ersetzen**: Kunden-Stückliste (PDF, sortiert nach Referenz) wählen — ersetzt Platzhalter-Werte/BEAK-Nr. der geladenen Variante(n) anhand der Referenz; Toast „XX von YY Werten ersetzt“. Die Ersetzung wird im Projekt mitgesichert.
+6. Optional Menü → **Stücklisten** → **SMD BG Stückliste laden** / **BG Stückliste laden** (PDF „Lager - Stückliste“):
    zum gefundenen Bauteil wird der Lagerplatz (über die BEAK-Nr.) rechts im Suchfeld angezeigt
-6. Menü → **Sichern** speichert Plan + Pick & Place + Kalibrierung + Stücklisten als Projekt `.zip`
-7. Menü → **Schließen** schließt das Dokument und zeigt wieder den Willkommensbildschirm
+7. Menü → **Sichern** speichert Plan + Pick & Place + Kalibrierung + Stücklisten als Projekt `.zip`
+8. Menü → **Schließen** schließt das Dokument und zeigt wieder den Willkommensbildschirm
 
 ## Dateiformate
 

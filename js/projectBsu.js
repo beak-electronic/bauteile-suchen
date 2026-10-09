@@ -115,6 +115,10 @@ export async function buildBsuZip(project) {
       bg: project.stuecklisten.bg || null,
     };
   }
+  // Pick&Place value replacements from Kunden-Stückliste
+  if (project.pnpValueReplace && project.pnpValueReplace.byRef) {
+    meta.pnpValueReplace = project.pnpValueReplace;
+  }
   zip.file(PROJECT_JSON_NAME, JSON.stringify(meta, null, 2));
 
   if (project.pdfBytes) {
@@ -325,6 +329,7 @@ export async function loadBsuZip(file) {
     variants,
     activeVariantId: refsOnly ? '__refs_only__' : (active?.id || null),
     stuecklisten: meta.stuecklisten || null,
+    pnpValueReplace: meta.pnpValueReplace || null,
   };
 }
 
