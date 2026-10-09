@@ -1,0 +1,921 @@
+:root {
+  --bg: #ffffff; /* white letterboxing around board + home-indicator strip */
+  --panel: #f4f5f7;
+  --panel2: #ffffff;
+  --border: #d8dde6;
+  --text: #1a1f27;
+  --muted: #6b7280;
+  --accent: #dd007a;
+  --accent-border: #a8005c;
+  --accent2: #3b82f6;
+  --ok: #15803d;
+  --warn: #b45309;
+  --touch: 44px;
+  --radius: 10px;
+  /* Chrome clear of notch/status: safe-area + 28px (opaque status bar already lays out below system chrome) */
+  --safe-top: max(28px, calc(env(safe-area-inset-top, 0px) + 28px));
+  --sab: env(safe-area-inset-bottom, 0px);
+  --app-h: 100dvh;
+  /* Probes for JS shellBottomPx (lvh = large viewport, covers home-indicator cases) */
+  --vv-lvh: 100lvh;
+  --vv-dvh: 100dvh;
+  --vv-svh: 100svh;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  /* Prefer large viewport / fill-available so the home-indicator strip is inside the page */
+  min-height: 100svh;
+  min-height: 100dvh;
+  min-height: 100lvh;
+  min-height: -webkit-fill-available;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  color-scheme: light;
+}
+
+button, input { font: inherit; color: inherit; }
+
+.app {
+  /* Pin top/sides; height from --app-h (JS). Avoid inset-bottom + height:100% fighting
+     each other — that left a white strip under the board on iPhone portrait / iPad. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: var(--app-h, 100lvh);
+  min-height: var(--app-h, 100lvh);
+  max-height: none;
+  overflow: hidden;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  /* No padding-bottom — canvas extends into safe-area; letterbox stays white */
+  background: var(--bg);
+}
+
+/* Opaque apple status-bar-style=default + white theme-color — system draws the bar;
+   no custom strip needed (black-translucent caused bottom letterbox mismatch). */
+.ios-pwa-status-strip { display: none !important; }
+
+/* Keep --bg white always (welcome + document). Canvas/shell extend into the
+   home-indicator strip (iPhone portrait + iPad any orientation); letterbox stays white. */
+/* Light frosted chrome (Anweisungen-style blur, light theme).
+   Blur lives on ::before + translateZ(0) so iOS Safari composites it from first
+   paint (backdrop-filter on .chrome itself often stayed opaque until a reflow,
+   e.g. tapping the search field). */
+.chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  /* No isolation/transform here — either would create a Backdrop Root and
+     hide the board (sibling) from ::before's backdrop-filter on iOS Safari. */
+  /* Board may pan/zoom underneath */
+  pointer-events: none;
+}
+.chrome::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.58);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+}
+/* Tiny blur delta forces Safari to re-sample canvas after first paint / pan / zoom */
+.chrome.bf-tick::before {
+  -webkit-backdrop-filter: blur(12.01px) saturate(1.2);
+  backdrop-filter: blur(12.01px) saturate(1.2);
+}
+.drawer.bf-tick {
+  -webkit-backdrop-filter: blur(8.01px) saturate(1.1);
+  backdrop-filter: blur(8.01px) saturate(1.1);
+}
+.board-h-btn.bf-tick {
+  -webkit-backdrop-filter: blur(8.01px) saturate(1.1);
+  backdrop-filter: blur(8.01px) saturate(1.1);
+}
+.input.bf-tick {
+  -webkit-backdrop-filter: blur(8.01px) saturate(1.1);
+  backdrop-filter: blur(8.01px) saturate(1.1);
+}
+.chrome > * {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+.chrome .menu-backdrop {
+  pointer-events: auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  padding-top: var(--safe-top);
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  font-size: 1.05rem;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(52vw, 420px);
+}
+
+
+.btn {
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.btn:hover, .btn:focus-visible {
+  border-color: var(--accent); /* like focused search field */
+  outline: none;
+}
+.btn.warn {
+  color: var(--warn);
+  border-color: #fcd34d;
+  background: #fffbeb;
+  font-weight: 700;
+}
+.btn.warn:hover, .btn.warn:focus-visible { border-color: #f59e0b; }
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: #fff;
+  font-weight: 700;
+}
+.btn.primary:hover, .btn.primary:focus-visible { border-color: var(--accent-border); }
+.btn.sm { min-height: 32px; padding: 4px 8px; font-size: 0.85rem; }
+.btn.block { display: block; width: 100%; text-align: left; margin-bottom: 6px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.menu-btn { font-size: 1.25rem; min-width: 40px; }
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40; /* below chrome (50), above board — click outside closes menu */
+  background: transparent;
+}
+
+.drawer {
+  position: absolute;
+  /* below topbar row inside frosted chrome */
+  top: calc(var(--safe-top) + 44px);
+  left: 8px;
+  z-index: 60;
+  width: min(320px, 92vw);
+  /* Use nearly all space below topbar; scrollbar only when content exceeds */
+  max-height: calc(100dvh - var(--safe-top) - 44px - 16px);
+  overflow: auto;
+  /* Same frosted glass as search field — own layer for live Safari re-sample */
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(8px) saturate(1.1);
+  border: 1px solid rgba(216, 221, 230, 0.65);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.drawer-section {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 12px 0 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.drawer-section:first-child { margin-top: 0; }
+
+.search-bar {
+  padding: 10px 12px;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.search-wrap { position: relative; }
+/* Lagerplatz (Stückliste) right-aligned inside the search field */
+.search-lager {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  /* Leave the search text at least ~40% of the field; label truncates beyond */
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent);
+  z-index: 2;
+}
+.search-lager-prefix { font-weight: 600; }
+/* Search text clips with … where it meets the Lagerplatz label */
+#searchInput { text-overflow: ellipsis; }
+.search-lager[hidden] { display: none !important; }
+
+.input {
+  width: 100%;
+  min-height: var(--touch);
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 221, 230, 0.65);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(8px) saturate(1.1);
+}
+.input::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Desktop (Mac/Windows): single top row [☰] [search…] [title…], chrome sits higher.
+   iPhone/iPad keep stacked layout via .ios-touch (set early in index.html).
+   display:contents flattens topbar/brand so grid can place menu | search | title. */
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+  html:not(.ios-touch) {
+    /* No fake iOS status-bar pad — sit closer to the window top */
+    --safe-top: 8px;
+  }
+  html:not(.ios-touch) .chrome {
+    display: grid;
+    grid-template-columns: auto minmax(12rem, 1fr) auto;
+    grid-template-areas: "menu search title";
+    align-items: start;
+    column-gap: 8px;
+    padding-right: 12px;
+  }
+  html:not(.ios-touch) .topbar,
+  html:not(.ios-touch) .brand,
+  html:not(.ios-touch) .brand > div {
+    display: contents;
+  }
+  html:not(.ios-touch) .menu-btn {
+    grid-area: menu;
+    margin: var(--safe-top) 0 0 12px;
+    align-self: start;
+    /* display:contents on .topbar/.brand drops their box — restore stacking
+       above .chrome::before (z-index:0) so menu isn't under the frost */
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+  }
+  html:not(.ios-touch) .title {
+    grid-area: title;
+    max-width: min(36vw, 360px);
+    /* No margin-top: align-self center matches search field vertical center */
+    margin-top: 0;
+    align-self: center;
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+    line-height: 1.25;
+    display: flex;
+    align-items: center;
+  }
+  html:not(.ios-touch) .search-bar {
+    grid-area: search;
+    min-width: 12rem;
+    padding: 8px 0;
+    padding-top: var(--safe-top);
+    display: flex;
+    align-items: center;
+  }
+  html:not(.ios-touch) .search-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+  html:not(.ios-touch) .search-bar .input {
+    min-height: 40px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  html:not(.ios-touch) .drawer {
+    top: calc(var(--safe-top) + 48px);
+    max-height: calc(100dvh - var(--safe-top) - 48px - 16px);
+  }
+}
+
+/* iPad (html.ipad, portrait + landscape): same single row as desktop, but touch-sized
+   (44px) and with the real iOS status-bar safe-area (default --safe-top kept).
+   Narrow Split View (<700px) keeps the stacked iPhone layout. */
+@media (min-width: 700px) {
+  html.ipad .chrome {
+    display: grid;
+    grid-template-columns: auto minmax(12rem, 1fr) auto;
+    grid-template-areas: "menu search title";
+    align-items: start;
+    column-gap: 8px;
+    padding-right: 12px;
+  }
+  html.ipad .topbar,
+  html.ipad .brand,
+  html.ipad .brand > div {
+    display: contents;
+  }
+  html.ipad .menu-btn {
+    grid-area: menu;
+    margin: var(--safe-top) 0 0 12px;
+    align-self: start;
+    min-height: var(--touch);
+    min-width: var(--touch);
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+  }
+  html.ipad .title {
+    grid-area: title;
+    max-width: min(30vw, 360px);
+    margin-top: 0;
+    /* vertical center of the search field (below the status-bar pad) */
+    align-self: start;
+    padding-top: calc(var(--safe-top) + (var(--touch) - 1.25em) / 2);
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+    line-height: 1.25;
+  }
+  html.ipad .search-bar {
+    grid-area: search;
+    min-width: 12rem;
+    padding: 8px 0;
+    padding-top: var(--safe-top);
+    display: flex;
+    align-items: center;
+  }
+  html.ipad .search-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+  html.ipad .drawer {
+    top: calc(var(--safe-top) + var(--touch) + 8px);
+    max-height: calc(100dvh - var(--safe-top) - var(--touch) - 8px - 16px);
+  }
+}
+/* iPad portrait / narrower single row: show only the place, drop „Lagerplatz: “ */
+@media (min-width: 700px) and (orientation: portrait), (min-width: 700px) and (max-width: 1000px) {
+  html.ipad .search-lager-prefix { display: none; }
+}
+
+.suggestions[hidden] { display: none !important; }
+.suggestions {
+  position: fixed;
+  z-index: 80;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(216, 221, 230, 0.55);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.12);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+  max-height: min(240px, 40vh);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+.sug-item {
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  min-height: 40px;
+}
+.sug-item:hover, .sug-item:focus, .sug-item.active { background: rgba(252, 231, 243, 0.55); outline: none; }
+
+.meta-row { display: none !important; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 600;
+}
+.badge.ok { color: var(--ok); border-color: #86efac; background: #f0fdf4; }
+.badge.warn { color: var(--warn); border-color: #fcd34d; background: #fffbeb; }
+
+.hit-info { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta { color: var(--muted); width: 100%; }
+
+.board-section {
+  /* Fill entire app under absolute chrome, including home-indicator area */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  flex: 1;
+  background: #ffffff;
+  /* Own compositing layer so Safari can sample canvas for chrome backdrop-filter */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+.board-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+  background: #ffffff;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+.board-canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  touch-action: none;
+}
+
+
+/* Calibration needed — white-theme mirror of Bestückungsplan .cal-needed-banner */
+.cal-needed-banner {
+  position: absolute;
+  top: calc(var(--chrome-h, 140px) + 12px);
+  left: 50%;
+  transform: translate(-50%);
+  z-index: 15;
+  max-width: min(520px, 92%);
+  padding: 8px 14px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  pointer-events: none;
+  color: var(--warn);
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(180, 83, 9, 0.08);
+}
+.cal-needed-banner[hidden] { display: none !important; }
+
+/* Short info toast (e.g. Stückliste geladen) — frosted like the search field */
+.app-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--sab) + 24px);
+  transform: translate(-50%);
+  z-index: 70;
+  max-width: min(520px, 92%);
+  padding: 8px 14px;
+  text-align: center;
+  font-size: 0.9rem;
+  pointer-events: none;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(8px) saturate(1.1);
+  border: 1px solid rgba(216, 221, 230, 0.75);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.app-toast[hidden] { display: none !important; }
+
+/* Floating calibrate action above click crosshair (uncalibrated + part selected) */
+.cal-set-btn {
+  position: absolute;
+  z-index: 16;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 14px));
+  white-space: nowrap;
+  pointer-events: auto;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(180, 83, 9, 0.18);
+}
+.cal-set-btn[hidden] { display: none !important; }
+
+.board-zoom-btns {
+  position: absolute;
+  top: calc(var(--chrome-h, 140px) + 8px);
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+.board-zoom-btns[hidden] { display: none !important; }
+.board-h-btn {
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  padding: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  /* Same frosted glass as search field — own layer so Safari re-samples on bf-tick */
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(8px) saturate(1.1);
+  border: 1px solid rgba(216, 221, 230, 0.65);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+.board-h-btn:hover, .board-h-btn:focus-visible {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 24px;
+  pointer-events: none;
+  z-index: 5;
+}
+.empty-state strong {
+  color: #9ca3af;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.empty-state-optional { font-size: 0.9em; }
+.empty-state[hidden] { display: none !important; }
+
+
+.hidden-file { display: none !important; }
+
+/* ==== Welcome screen (light theme, Anweisungen layout) ================== */
+.welcome-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 30%, rgba(221, 0, 122, 0.12), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 80% 90%, rgba(59, 130, 246, 0.06), transparent 50%),
+    #ffffff;
+}
+.welcome-screen[hidden] { display: none !important; }
+.welcome-card {
+  width: min(420px, 94vw);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px 22px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(221, 0, 122, 0.08);
+  text-align: center;
+}
+.welcome-brand { margin-bottom: 22px; }
+.welcome-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  display: block;
+  margin: 0 auto 14px;
+  box-shadow: 0 8px 24px rgba(221, 0, 122, 0.22);
+}
+.welcome-title {
+  margin: 0 0 6px;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.welcome-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.72rem, 3.5vw, 0.9rem);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.welcome-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+}
+.welcome-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: #fff;
+}
+.welcome-btn.primary:hover,
+.welcome-btn.primary:focus-visible {
+  border-color: #ff4da6;
+}
+.welcome-version {
+  margin: 16px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
+  opacity: 0.85;
+  letter-spacing: 0.02em;
+}
+
+/* Hide chrome while welcome is open (Anweisungen parity) */
+.app.welcome-open .chrome,
+.app.welcome-open .board-zoom-btns,
+.app.welcome-open .empty-state {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.app.welcome-open .drawer {
+  z-index: 95;
+  visibility: visible;
+  pointer-events: auto;
+}
+.app.welcome-open .menu-backdrop {
+  z-index: 92;
+  visibility: visible;
+}
+
+/* ==== Bestückungsvarianten bar ========================================== */
+.variant-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.variant-bar[hidden] { display: none !important; }
+.variant-label {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.variant-current-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid rgba(216, 221, 230, 0.85);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(8px) saturate(1.1);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.variant-current-btn:hover,
+.variant-current-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.variant-current-btn::after {
+  content: " ▾";
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ==== Variant picker overlay (welcome-style, frosted over plan) ========= */
+.variant-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.48);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+.variant-picker[hidden] { display: none !important; }
+.variant-picker-card {
+  width: min(420px, 94vw);
+  max-height: min(78dvh, 640px);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 26px 22px 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(221, 0, 122, 0.08);
+  text-align: center;
+}
+.variant-picker-title {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.variant-picker-sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.variant-picker-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.variant-picker-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  text-align: center;
+}
+.variant-picker-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: #fff;
+}
+.variant-picker-btn.primary:hover,
+.variant-picker-btn.primary:focus-visible {
+  border-color: #ff4da6;
+}
+.variant-picker-btn.active:not(.primary) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(221, 0, 122, 0.18);
+}
+
+.variant-picker-btn.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.variant-picker-btn.danger:hover,
+.variant-picker-btn.danger:focus-visible {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+/* While variant picker is open: hide chrome so plan shows under blur */
+.app.variant-picker-open .chrome,
+.app.variant-picker-open .board-zoom-btns,
+.app.variant-picker-open .empty-state,
+.app.variant-picker-open .cal-needed-banner,
+.app.variant-picker-open .cal-set-btn,
+.app.variant-picker-open .welcome-screen,
+.app.variant-picker-open .suggestions {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.app.variant-picker-open .drawer {
+  z-index: 95;
+  visibility: visible;
+  pointer-events: auto;
+}
+.app.variant-picker-open .menu-backdrop {
+  z-index: 92;
+  visibility: visible;
+}
+
+
+/* ==== Calibration mirror panel (X/Y flip) ================================ */
+.flip-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 73;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.48);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+.flip-panel[hidden] { display: none !important; }
+.flip-panel-card {
+  width: min(360px, 94vw);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 20px 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(221, 0, 122, 0.08);
+  text-align: center;
+}
+.flip-panel-title {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.flip-panel-sub {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.flip-panel-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.flip-toggle {
+  flex: 1 1 0;
+  min-height: 48px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.flip-toggle.active {
+  border-color: var(--accent);
+  background: rgba(252, 231, 243, 0.85);
+  box-shadow: 0 0 0 2px rgba(221, 0, 122, 0.18);
+  color: var(--accent-border);
+}
+.flip-panel-done {
+  margin-bottom: 0;
+  text-align: center;
+  min-height: 44px;
+}
+.app.flip-panel-open .chrome,
+.app.flip-panel-open .board-zoom-btns,
+.app.flip-panel-open .empty-state,
+.app.flip-panel-open .cal-needed-banner,
+.app.flip-panel-open .cal-set-btn,
+.app.flip-panel-open .welcome-screen,
+.app.flip-panel-open .suggestions {
+  pointer-events: none;
+}
+.app.flip-panel-open .drawer {
+  pointer-events: none;
+  opacity: 0.35;
+}
+.app.flip-panel-open .menu-backdrop {
+  pointer-events: none;
+}

@@ -1,0 +1,5 @@
+# Demo / sample / test data must never be committed (kept outside the repo)
+sample/
+test-assets/
+*.pkp.csv
+PKP*.csv

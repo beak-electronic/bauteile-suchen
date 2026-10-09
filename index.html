@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light" />
+    <meta name="msapplication-navbutton-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Bauteile Suchen" />
+    <meta name="description" content="Bauteile Suchen — Bauteil auf Bestückungsplan-PDF per Fadenkreuz finden" />
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./favicon-48.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./css/app.css" />
+    <title>Bauteile Suchen</title>
+  </head>
+  <body>
+    <script>
+      (function () {
+        try {
+          var standalone =
+            window.navigator.standalone === true ||
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: window-controls-overlay)').matches;
+          if (standalone) document.documentElement.setAttribute('data-standalone', '1');
+          var ua = navigator.userAgent || '';
+          var ios =
+            /iPhone|iPad|iPod/.test(ua) ||
+            (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+          if (ios) document.documentElement.classList.add('ios-touch');
+          // iPad (incl. iPadOS desktop UA): single-row chrome like desktop (see app.css)
+          var ipad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+          if (ipad) document.documentElement.classList.add('ipad');
+        } catch (e) {}
+      })();
+    </script>
+    <div class="ios-pwa-status-strip" aria-hidden="true"></div>
+    <div class="app welcome-open" id="app">
+      <div class="menu-backdrop" id="menuBackdrop" hidden></div>
+      <div class="chrome" id="chrome">
+        <header class="topbar">
+          <div class="brand">
+            <button type="button" class="btn sm menu-btn" id="menuBtn" aria-label="Menü" aria-haspopup="true" aria-expanded="false">☰</button>
+            <div>
+              <div class="title" id="docTitle">Bauteile Suchen</div>
+            </div>
+          </div>
+        </header>
+
+        <nav class="drawer" id="drawer" hidden aria-label="Menü">
+          <div class="drawer-section">Datei</div>
+          <button type="button" class="btn block primary" id="menuOpen">Öffnen</button>
+          <button type="button" class="btn block" id="menuNew">Neu</button>
+          <button type="button" class="btn block" id="menuSave">Sichern</button>
+          <button type="button" class="btn block" id="menuClose">Schließen</button>
+          <div class="drawer-section">Erstellen</div>
+          <button type="button" class="btn block" id="menuPdf">Bestückungsplan PDF laden</button>
+          <button type="button" class="btn block" id="menuPnp">Pick &amp; Place CSV laden</button>
+          <div class="drawer-section">Bestückungsvarianten</div>
+          <button type="button" class="btn block" id="menuVariantPick">Variante wählen</button>
+          <button type="button" class="btn block" id="menuVariantRenew">Variante erneuern</button>
+          <button type="button" class="btn block" id="menuVariantAdd">Variante hinzufügen</button>
+          <button type="button" class="btn block" id="menuVariantRemove">Variante entfernen</button>
+          <div class="drawer-section">Stücklisten</div>
+          <button type="button" class="btn block" id="menuBomSmd">SMD BG Stückliste laden</button>
+          <button type="button" class="btn block" id="menuBomBg">BG Stückliste laden</button>
+          <div class="drawer-section">Kalibrierung</div>
+          <button type="button" class="btn block" id="menuSetRef">Referenzpunkt setzen</button>
+          <button type="button" class="btn block" id="menuMirrorCal">Kalibrierung spiegeln</button>
+          <button type="button" class="btn block" id="menuClearCal">Kalibrierung löschen</button>
+          <div class="drawer-section">Info</div>
+          <button type="button" class="btn block" id="menuAbout">Über / Version</button>
+        </nav>
+
+        <div class="search-bar">
+          <div class="variant-bar" id="variantBar" hidden>
+            <label class="variant-label">Bestückungsvariante</label>
+            <button type="button" class="variant-current-btn" id="variantCurrentBtn" aria-haspopup="dialog" aria-label="Bestückungsvariante wählen"></button>
+          </div>
+          <div class="search-wrap">
+            <label class="visually-hidden" for="searchInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Suche</label>
+            <input
+              class="input"
+              id="searchInput"
+              type="search"
+              placeholder="Suche Bauteil Referenz (z.B. R1)"
+              autocomplete="off"
+              spellcheck="false"
+              enterkeyhint="search"
+            />
+            <span class="search-lager" id="searchLager" title="Lagerplatz" hidden></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="suggestions" id="suggestions" hidden></div>
+
+      <section class="board-section">
+        <div class="board-wrap" id="boardWrap">
+          <div class="cal-needed-banner" id="calNeededBanner" hidden>Kalibrierung für dieses Bild erforderlich</div>
+          <div class="app-toast" id="appToast" role="status" aria-live="polite" hidden></div>
+          <button type="button" class="btn warn cal-set-btn" id="calSetBtn" hidden>Kalibrierung setzen</button>
+          <canvas class="board-canvas" id="boardCanvas"></canvas>
+          <div class="board-zoom-btns" id="boardZoomBtns" hidden>
+            <button type="button" class="btn sm board-h-btn" id="btnZoomFit" title="Einpassen" aria-label="Einpassen">⛶</button>
+          </div>
+          <div class="empty-state" id="emptyState" hidden>
+            <strong>Bauteile Suchen</strong>
+            <div>Menü → Datei öffnen (Projekt .zip)<br />oder Erstellen → Bestückungsplan PDF / Pick &amp; Place CSV laden</div>
+            <div class="empty-state-optional">Optional: Stücklisten → SMD BG Stückliste / BG Stückliste laden (zeigt Lagerplatz)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Welcome (light) — shown when no project open -->
+      <div class="welcome-screen" id="welcomeScreen" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+        <div class="welcome-card">
+          <div class="welcome-brand">
+            <img class="welcome-icon" src="./apple-touch-icon.png" alt="" width="72" height="72" />
+            <h1 class="welcome-title" id="welcomeTitle">Bauteile Suchen</h1>
+            <p class="welcome-sub">Bauteile auf dem Bestückungsplan finden</p>
+          </div>
+          <div class="welcome-actions">
+            <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
+            <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
+          </div>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.0</p>
+        </div>
+      </div>
+
+
+      <!-- Calibration mirror panel (X/Y flip CAD↔image mapping) -->
+      <div class="flip-panel" id="flipPanel" hidden role="dialog" aria-modal="true" aria-labelledby="flipPanelTitle">
+        <div class="flip-panel-card">
+          <h2 class="flip-panel-title" id="flipPanelTitle">Kalibrierung spiegeln</h2>
+          <p class="flip-panel-sub">Spiegeln ändert die CAD↔Bild-Zuordnung (nicht nur die Ansicht)</p>
+          <div class="flip-panel-row">
+            <button type="button" class="btn flip-toggle" id="flipXBtn" title="CAD X-Achse spiegeln">X spiegeln</button>
+            <button type="button" class="btn flip-toggle" id="flipYBtn" title="CAD Y-Achse spiegeln">Y spiegeln</button>
+          </div>
+          <button type="button" class="btn primary block flip-panel-done" id="flipPanelDone">Fertig</button>
+        </div>
+      </div>
+
+      <!-- Variant picker (light frosted overlay over opened plan) -->
+      <div class="variant-picker" id="variantPicker" hidden role="dialog" aria-modal="true" aria-labelledby="variantPickerTitle">
+        <div class="variant-picker-card">
+          <h2 class="variant-picker-title" id="variantPickerTitle">Bestückungsvariante wählen</h2>
+          <p class="variant-picker-sub" id="variantPickerSub">Welche Baugruppe soll angezeigt werden?</p>
+          <div class="variant-picker-actions" id="variantPickerActions"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <input class="hidden-file" id="pdfInput" type="file" accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" />
+    <input class="hidden-file" id="pnpInput" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" />
+    <input class="hidden-file" id="variantInput" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" />
+    <input class="hidden-file" id="bomInput" type="file" accept=".pdf,application/pdf,.csv,text/csv" />
+    <input class="hidden-file" id="bsuInput" type="file" accept=".zip,.ZIP,application/zip,application/x-zip-compressed,.bsu,.BSU,application/octet-stream" />
+
+    <script src="./vendor/jszip/jszip.min.js"></script>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

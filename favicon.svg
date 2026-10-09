@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- E3 colors swapped, full-bleed magenta; lens centered on 256,256 -->
+  <rect width="512" height="512" rx="113" fill="#dd007a"/>
+  <!-- content scaled from former 64..448 card → full 512 (×4/3); cy 236→256 (+20) -->
+  <g transform="translate(0 0) scale(1.3333333) translate(-64 -64)">
+    <line x1="150" y1="256" x2="186" y2="256" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+    <line x1="326" y1="256" x2="362" y2="256" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+    <rect x="186" y="234" width="140" height="44" rx="12" fill="#ffffff"/>
+    <rect x="208" y="234" width="12" height="44" fill="#dd007a"/>
+    <rect x="232" y="234" width="12" height="44" fill="#dd007a" opacity="0.85"/>
+    <rect x="256" y="234" width="12" height="44" fill="#dd007a" opacity="0.7"/>
+    <rect x="290" y="234" width="16" height="44" fill="#dd007a" opacity="0.55"/>
+    <circle cx="256" cy="256" r="108" fill="none" stroke="#ffffff" stroke-width="26"/>
+    <line x1="334" y1="334" x2="410" y2="416" stroke="#ffffff" stroke-width="30" stroke-linecap="round"/>
+  </g>
+</svg>
