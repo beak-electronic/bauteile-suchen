@@ -37,7 +37,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.5.1';
+const VERSION = 'V1.5.2';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -412,9 +412,8 @@ function renderVariantPickerButtons() {
     return;
   }
 
-  // Always first: Nur Bauteil Referenzen (primary accent)
+  // Always first: Nur Bauteil Referenzen (same neutral style as other variants)
   mk(REFS_ONLY_ID, REFS_ONLY_LABEL, {
-    primary: true,
     onClick: () => {
       applyVariant(REFS_ONLY_ID);
       hideVariantPicker();
@@ -729,7 +728,7 @@ function updateSearchLager() {
   if (!lab) return;
   const places = lagerTextForPart(state.searchHit);
   const text = places ? `Lagerplatz: ${places}` : '';
-  // Prefix visibility is CSS/orientation-dependent (iPad portrait hides it) → re-measure on viewport change.
+  // Re-measure padding when viewport size changes (font/layout).
   const vp = `${window.innerWidth}x${window.innerHeight}`;
   if (lab.textContent === text && lab.hidden === !text && lagerMeasuredVp === vp) return; // unchanged (draw runs per frame)
   lagerMeasuredVp = vp;
@@ -915,40 +914,59 @@ function fitDocTitle() {
 }
 
 /**
- * When the search field shows a confirmed part label (not focused), shrink font
- * so the full label fits beside Lagerplatz (min 12px). Focused/typing stays ≥16px.
+ * When the search field shows a confirmed part label (not focused), shrink the
+ * part + Lagerplatz fonts together so „Lagerplatz: …“ stays fully visible
+ * (never ellipsized). Min 12px; then the part label may ellipsize. Focused/typing stays ≥16px.
  */
 function fitSearchLabelFont() {
   const input = el.search;
+  const lab = el.searchLager;
   if (!input) return;
   if (document.activeElement === input) {
     input.style.fontSize = '';
+    if (lab) lab.style.fontSize = '';
     return;
   }
-  // Only auto-shrink on iPhone/touch stacked UIs when a hit label is shown
   const label = (input.value || '').trim();
+  const lagerShown = !!(lab && !lab.hidden && lab.textContent.trim());
   if (!label || !state.searchHit) {
     input.style.fontSize = '';
+    if (lab) lab.style.fontSize = '';
     return;
   }
-  input.style.fontSize = '16px';
-  const cs = getComputedStyle(input);
-  const padL = parseFloat(cs.paddingLeft) || 0;
-  const padR = parseFloat(cs.paddingRight) || 0;
-  const avail = Math.max(8, input.clientWidth - padL - padR);
-  // Measure with canvas
-  const canvas = fitSearchLabelFont._c || (fitSearchLabelFont._c = document.createElement('canvas'));
-  const ctx = canvas.getContext('2d');
-  let size = 16;
   const min = 12;
+  let size = 16;
+  input.style.fontSize = '16px';
+  if (lab) lab.style.fontSize = '16px';
+  const cs = getComputedStyle(input);
   const family = cs.fontFamily || 'system-ui';
   const weight = cs.fontWeight || '400';
-  while (size > min) {
+  const canvas = fitSearchLabelFont._c || (fitSearchLabelFont._c = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  const gap = 20; // padding between part text and Lagerplatz overlay
+  while (true) {
+    input.style.fontSize = `${size}px`;
+    if (lab) lab.style.fontSize = `${size}px`;
+    // Lagerplatz must stay fully visible — size padding from its natural width
+    const lagerW = lagerShown ? Math.ceil(lab.offsetWidth) : 0;
+    input.style.paddingRight = lagerW ? `${lagerW + gap}px` : '';
+    const padL = parseFloat(getComputedStyle(input).paddingLeft) || 0;
+    const padR = parseFloat(getComputedStyle(input).paddingRight) || 0;
+    const avail = Math.max(8, input.clientWidth - padL - padR);
     ctx.font = `${weight} ${size}px ${family}`;
-    if (ctx.measureText(label).width <= avail) break;
+    const labelW = ctx.measureText(label).width;
+    // Also ensure Lagerplatz itself fits in the field (never clip it)
+    const fieldW = input.clientWidth;
+    const lagerFits = !lagerShown || lagerW + 24 <= fieldW * 0.7 || size <= min;
+    if (labelW <= avail && lagerFits) break;
+    if (size <= min) break;
     size -= 0.5;
   }
   input.style.fontSize = `${size}px`;
+  if (lab) lab.style.fontSize = `${size}px`;
+  if (lagerShown) {
+    input.style.paddingRight = `${Math.ceil(lab.offsetWidth) + gap}px`;
+  }
 }
 
 function updateBadges() {
