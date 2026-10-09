@@ -28,7 +28,7 @@ import {
   CODE_LENGTH,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.2.2';
+const VERSION = 'V1.2.3';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -1422,19 +1422,29 @@ function drawPartDots(ctx) {
   ctx.fill();
 }
 
-/** Nearest part under image-space point, within ~14 CSS-px hit radius. */
+/** Hit radius in CSS screen px (visual dot size unchanged). Desktop ~14, touch ~22. */
+function partHitRadiusCssPx() {
+  try {
+    if (IS_IOS_TOUCH || window.matchMedia('(pointer: coarse)').matches) return 22;
+  } catch (_) {
+    if (IS_IOS_TOUCH) return 22;
+  }
+  return 14;
+}
+
+/** Nearest part under image-space point within the screen-space hit radius (zoom-independent). */
 function hitTestPartAt(imgX, imgY) {
   if (!isCalibrated(state.cal, state.parts)) return null;
   const parts = partsWithPositions();
   if (!parts.length) return null;
-  const maxDist = 14 / state.zoom;
+  const maxDist = partHitRadiusCssPx() / state.zoom; // screen CSS px → image space
   let best = null;
   let bestD = maxDist;
   for (const p of parts) {
     const pos = cadToImage(p, state.cal, state.parts);
     if (!pos) continue;
     const d = Math.hypot(pos.x - imgX, pos.y - imgY);
-    if (d <= bestD) {
+    if (d < bestD || (d === bestD && !best)) {
       bestD = d;
       best = p;
     }
@@ -2674,6 +2684,21 @@ function endPointer(ev) {
 
 el.canvas.addEventListener('pointerup', endPointer);
 el.canvas.addEventListener('pointercancel', endPointer);
+
+// Desktop: pointer cursor when hovering a part within the hit radius (visual dots unchanged).
+el.canvas.addEventListener('pointermove', (ev) => {
+  if (ev.pointerType === 'touch') return;
+  if (pointers.size > 0 || pinch) return; // dragging / pinching
+  if (!state.pageBitmap || !isCalibrated(state.cal, state.parts)) {
+    el.canvas.style.cursor = '';
+    return;
+  }
+  const img = screenToImage(ev.clientX, ev.clientY);
+  el.canvas.style.cursor = hitTestPartAt(img.x, img.y) ? 'pointer' : '';
+}, { passive: true });
+el.canvas.addEventListener('pointerleave', () => {
+  el.canvas.style.cursor = '';
+});
 
 el.canvas.addEventListener(
   'wheel',
