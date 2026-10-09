@@ -121,10 +121,11 @@
       </section>
 
       <!-- Welcome (light) — shown when no project open -->
-      <div class="code-dialog" id="codeDialog" role="dialog" aria-modal="true" aria-labelledby="codeDialogText" hidden>
+      <div class="code-dialog" id="codeDialog" role="dialog" aria-modal="true" aria-labelledby="codeDialogTitle codeDialogText" hidden>
         <form class="code-card" id="codeForm" novalidate autocomplete="off">
           <img class="code-icon" src="./apple-touch-icon.png" alt="" width="56" height="56" />
-          <p class="code-text" id="codeDialogText">Datei ist geschützt, bitte Code eingeben:</p>
+          <h2 class="code-title" id="codeDialogTitle">Datei ist geschützt.</h2>
+          <p class="code-text" id="codeDialogText">Bitte 6-stelligen Code eingeben.</p>
           <input
             id="codeInput"
             class="code-input"
@@ -158,7 +159,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.1</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.2</p>
         </div>
       </div>
 

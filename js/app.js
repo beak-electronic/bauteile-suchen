@@ -28,7 +28,7 @@ import {
   CODE_LENGTH,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.1';
+const VERSION = 'V1.2';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -2177,7 +2177,8 @@ async function unlockEncryptedProject(outer, manifest) {
   if (!master || !(await verifyMasterKey(master, manifest))) {
     master = null;
     const ok = await showCodeDialog({
-      text: 'Datei ist geschützt, bitte Code eingeben:',
+      title: 'Datei ist geschützt.',
+      text: 'Bitte 6-stelligen Code eingeben.',
       verify: async (code) => {
         const m = await deriveMasterKey(code);
         if (!(await verifyMasterKey(m, manifest))) return false;
@@ -2199,14 +2200,28 @@ let codeDialogBusy = false;
  * Modal 4-digit code dialog. `verify(code)` → true closes with OK, false = „Code falsch“.
  * @returns {Promise<boolean>} true = OK & verified, false = Abbrechen
  */
-function showCodeDialog({ text, verify }) {
+function showCodeDialog({ title, text, verify }) {
   const dlg = document.getElementById('codeDialog');
   const form = document.getElementById('codeForm');
   const input = document.getElementById('codeInput');
   const err = document.getElementById('codeError');
   const okBtn = document.getElementById('codeOk');
   const cancelBtn = document.getElementById('codeCancel');
-  document.getElementById('codeDialogText').textContent = text;
+  const titleEl = document.getElementById('codeDialogTitle');
+  const textEl = document.getElementById('codeDialogText');
+  if (title) {
+    titleEl.textContent = title;
+    titleEl.hidden = false;
+    textEl.textContent = text || '';
+    textEl.hidden = !text;
+    form.classList.toggle('title-only', !text);
+  } else {
+    titleEl.textContent = '';
+    titleEl.hidden = true;
+    textEl.textContent = text || '';
+    textEl.hidden = !text;
+    form.classList.add('title-only');
+  }
   if (codeDialogBusy) return Promise.resolve(false);
   codeDialogBusy = true;
   input.value = '';
