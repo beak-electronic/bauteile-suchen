@@ -15,8 +15,20 @@ import {
   downloadBlob,
 } from './projectBsu.js';
 import { parseBomPdf, parseBomCsv, normalizeBomList, buildBomLookup, beakKey } from './bom.js';
+import {
+  readEncryptedManifest,
+  getStoredMasterKey,
+  storeMasterKey,
+  forgetMasterKey,
+  deriveMasterKey,
+  verifyMasterKey,
+  encryptProjectZip,
+  decryptProjectZip,
+  isValidCode,
+  CODE_LENGTH,
+} from './projectCrypto.js';
 
-const VERSION = 'V1.0';
+const VERSION = 'V1.1';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -2062,7 +2074,23 @@ async function saveProject() {
     return;
   }
   try {
-    const blob = await buildBsuZip({
+    // Always save protected: get (or set) this device's master key first — Abbrechen = don't save.
+    let master = await getStoredMasterKey();
+    if (!master) {
+      const ok = await showCodeDialog({
+        text: 'Code für geschützte Dateien eingeben:',
+        verify: async (code) => {
+          master = await deriveMasterKey(code);
+          return true;
+        },
+      });
+      if (!ok || !master) {
+        setStatus('Sichern abgebrochen.');
+        return;
+      }
+      await storeMasterKey(master);
+    }
+    const innerZip = await buildBsuZip({
       name: state.projectName || state.pdfName?.replace(/\.[^.]+$/, '') || 'Bauteile_Suchen',
       pdfName: state.pdfName || 'board.pdf',
       pnpName: state.pnpName || 'PKP.csv',
@@ -2080,6 +2108,7 @@ async function saveProject() {
       pageH: state.pageH,
       stuecklisten: state.boms.smd || state.boms.bg ? state.boms : null,
     });
+    const blob = await encryptProjectZip(innerZip, master);
     const fname = suggestedBsuFilename({
       name: state.projectName,
       pdfName: state.pdfName,
@@ -2139,6 +2168,134 @@ async function saveProject() {
   }
 }
 
+/**
+ * Decrypt a protected project: stored device key first (silent), else ask for the code.
+ * @returns {Promise<Uint8Array|null>} inner ZIP bytes, or null when cancelled
+ */
+async function unlockEncryptedProject(outer, manifest) {
+  let master = await getStoredMasterKey();
+  if (!master || !(await verifyMasterKey(master, manifest))) {
+    master = null;
+    const ok = await showCodeDialog({
+      text: 'Datei ist geschützt, bitte Code eingeben:',
+      verify: async (code) => {
+        const m = await deriveMasterKey(code);
+        if (!(await verifyMasterKey(m, manifest))) return false;
+        master = m;
+        return true;
+      },
+    });
+    if (!ok || !master) return null;
+    await storeMasterKey(master);
+  }
+  return decryptProjectZip(outer, manifest, master);
+}
+
+// ---------------------------------------------------------------- Code dialog
+let codeFailCount = 0; // brute-force friction (per session): 1s, 2s, 4s … max 30s after wrong codes
+let codeDialogBusy = false;
+
+/**
+ * Modal 4-digit code dialog. `verify(code)` → true closes with OK, false = „Code falsch“.
+ * @returns {Promise<boolean>} true = OK & verified, false = Abbrechen
+ */
+function showCodeDialog({ text, verify }) {
+  const dlg = document.getElementById('codeDialog');
+  const form = document.getElementById('codeForm');
+  const input = document.getElementById('codeInput');
+  const err = document.getElementById('codeError');
+  const okBtn = document.getElementById('codeOk');
+  const cancelBtn = document.getElementById('codeCancel');
+  document.getElementById('codeDialogText').textContent = text;
+  if (codeDialogBusy) return Promise.resolve(false);
+  codeDialogBusy = true;
+  input.value = '';
+  err.textContent = '';
+  input.disabled = false;
+  okBtn.disabled = false;
+  const prevFocus = document.activeElement;
+  dlg.hidden = false;
+  input.focus();
+
+  return new Promise((resolve) => {
+    let checking = false;
+    let lockTimer = 0;
+    const setBusy = (b) => {
+      input.disabled = b;
+      okBtn.disabled = b;
+    };
+    const finish = (result) => {
+      clearTimeout(lockTimer);
+      form.removeEventListener('submit', onSubmit);
+      cancelBtn.removeEventListener('click', onCancel);
+      dlg.removeEventListener('keydown', onKey);
+      input.removeEventListener('input', onInput);
+      dlg.hidden = true;
+      input.value = '';
+      err.textContent = '';
+      codeDialogBusy = false;
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus({ preventScroll: true });
+      resolve(result);
+    };
+    const fail = (msg) => {
+      err.textContent = msg;
+      const card = form;
+      card.classList.remove('shake');
+      void card.offsetWidth; // restart animation
+      card.classList.add('shake');
+      input.value = '';
+    };
+    const onInput = () => {
+      const digits = input.value.replace(/\D+/g, '').slice(0, CODE_LENGTH);
+      if (digits !== input.value) input.value = digits;
+      if (err.textContent && !input.disabled && input.value) err.textContent = '';
+    };
+    const onSubmit = async (ev) => {
+      ev.preventDefault();
+      if (checking || input.disabled) return;
+      const code = input.value;
+      if (!isValidCode(code)) {
+        fail(`Bitte ${CODE_LENGTH} Ziffern eingeben`);
+        input.focus();
+        return;
+      }
+      checking = true;
+      setBusy(true);
+      let ok = false;
+      try {
+        ok = await verify(code);
+      } catch (e) {
+        console.error(e);
+      }
+      checking = false;
+      if (ok) {
+        codeFailCount = 0;
+        finish(true);
+        return;
+      }
+      codeFailCount += 1;
+      fail('Code falsch');
+      const wait = Math.min(30000, 1000 * 2 ** (codeFailCount - 1));
+      lockTimer = setTimeout(() => {
+        setBusy(false);
+        input.focus();
+      }, wait);
+    };
+    const onCancel = () => finish(false);
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(false);
+      }
+    };
+    form.addEventListener('submit', onSubmit);
+    cancelBtn.addEventListener('click', onCancel);
+    dlg.addEventListener('keydown', onKey);
+    input.addEventListener('input', onInput);
+  });
+}
+
 async function openProjectFile(file, { handle = null } = {}) {
   if (!file) return;
   try {
@@ -2146,7 +2303,18 @@ async function openProjectFile(file, { handle = null } = {}) {
       setStatus('Bitte eine Projektdatei (.zip) öffnen.');
       return;
     }
-    const loaded = await loadBsuZip(file);
+    const outer = await globalThis.JSZip.loadAsync(file);
+    const manifest = await readEncryptedManifest(outer);
+    let source = outer; // unencrypted .zip / legacy .bsu → open as before
+    if (manifest) {
+      const inner = await unlockEncryptedProject(outer, manifest);
+      if (!inner) {
+        setStatus('Öffnen abgebrochen.');
+        return;
+      }
+      source = inner;
+    }
+    const loaded = await loadBsuZip(source);
     state.openFileHandle = handle || null;
     state.openFileName = file.name;
     state.projectName =
@@ -2419,6 +2587,17 @@ if (el.flipPanelDone) el.flipPanelDone.addEventListener('click', hideFlipPanel);
 if (el.flipPanel) el.flipPanel.addEventListener('click', (ev) => {
   if (ev.target === el.flipPanel) hideFlipPanel();
 });
+document.getElementById('menuForgetCode')?.addEventListener('click', async () => {
+  openMenu(false);
+  try {
+    await forgetMasterKey();
+    showToast('Code auf diesem Gerät vergessen. Beim nächsten Öffnen/Sichern wird er abgefragt.');
+  } catch (e) {
+    console.error(e);
+    showToast('Code konnte nicht entfernt werden: ' + (e.message || e));
+  }
+});
+
 document.getElementById('menuAbout').addEventListener('click', () => {
   openMenu(false);
   alert(`Bauteile Suchen ${VERSION}

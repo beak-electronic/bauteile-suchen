@@ -919,3 +919,87 @@ button, input { font: inherit; color: inherit; }
 .app.flip-panel-open .menu-backdrop {
   pointer-events: none;
 }
+
+/* ==== Code dialog (geschützte Projekt-ZIP) — welcome-card style ==================== */
+.code-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 120; /* above welcome (70) and drawer (95) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(10px) saturate(1.1);
+}
+.code-dialog[hidden] { display: none !important; }
+.code-card {
+  width: min(360px, 94vw);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 22px 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(221, 0, 122, 0.08);
+  text-align: center;
+  margin: 0;
+}
+.code-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 13px;
+  display: block;
+  margin: 0 auto 14px;
+  box-shadow: 0 8px 24px rgba(221, 0, 122, 0.22);
+}
+.code-text {
+  margin: 0 0 16px;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+.code-input {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+  min-height: 56px;
+  padding: 8px 10px 8px calc(10px + 0.45em); /* letter-spacing trails the last digit */
+  font-size: 1.8rem; /* ≥16px: no iOS auto-zoom on focus */
+  font-weight: 700;
+  letter-spacing: 0.45em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  -webkit-text-security: disc; /* masked like a PIN, keeps inputmode=numeric keypad */
+  caret-color: var(--accent);
+}
+.code-input::placeholder { color: #d1d5db; }
+.code-input:focus { outline: none; border-color: var(--accent); }
+.code-input:disabled { opacity: 0.55; }
+.code-error {
+  min-height: 1.3em;
+  margin: 10px 0 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.code-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.code-card.shake { animation: code-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes code-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .code-card.shake { animation: none; }
+}

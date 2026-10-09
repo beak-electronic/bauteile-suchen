@@ -164,7 +164,7 @@ export function isProjectFilename(name) {
 }
 
 /**
- * @param {File|Blob} file
+ * @param {File|Blob|Uint8Array|import('jszip')} file
  * @returns {Promise<{
  *   meta: object,
  *   pdfBytes: Uint8Array|null,
@@ -178,7 +178,8 @@ export function isProjectFilename(name) {
  */
 export async function loadBsuZip(file) {
   const JSZip = getJSZip();
-  const zip = await JSZip.loadAsync(file);
+  // Accepts File/Blob/bytes or an already loaded JSZip (avoids parsing twice).
+  const zip = file instanceof JSZip ? file : await JSZip.loadAsync(file);
   const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
   const projPath = names.find((n) => /(^|\/)projekt\.json$/i.test(n));
   if (!projPath) {
