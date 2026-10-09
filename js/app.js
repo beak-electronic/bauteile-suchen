@@ -34,7 +34,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.4.1';
+const VERSION = 'V1.4.2';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -89,7 +89,7 @@ const el = {
 let variantFileMode = 'add';
 /** 'smd' | 'bg' — which Stückliste bomInput loads */
 let bomFileSource = 'smd';
-const BOM_LABEL = { smd: 'SMD BG Stückliste', bg: 'BG Stückliste' };
+const BOM_LABEL = { smd: 'SMD BG Stückl. (Lager-Stückl. Artikel-Bez.)', bg: 'BG Stückl. (Lager-Stückl. Artikel-Bez.)' };
 
 const state = {
   parts: [],
@@ -2014,7 +2014,7 @@ async function startNewDocument() {
   state.welcomeDismissed = true;
   showWelcome(false);
   if (el.empty) el.empty.hidden = hasProjectContent();
-  setStatus('Neu — Menü → Bestückungsplan PDF / Pick & Place CSV laden oder Öffnen. Optional: SMD BG Stückliste / BG Stückliste laden (zeigt Lagerplatz).');
+  setStatus('Neu — Menü → Bestückungsplan PDF / Pick & Place CSV laden oder Öffnen. Optional: SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.) / BG Stückl. laden (Lager-Stückl. Artikel-Bez.) (zeigt Lagerplatz).');
 }
 
 
