@@ -24,7 +24,12 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()),
+    // cache:'reload' bypasses the browser HTTP cache (GitHub Pages max-age=600),
+    // so a new build never gets precached with stale files from the previous version.
+    caches
+      .open(CACHE)
+      .then((cache) => cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -35,6 +40,11 @@ self.addEventListener('activate', (event) => {
     ).then(() => self.clients.claim()),
   );
 });
+
+/** Network fetch that revalidates with the server (ETag) instead of trusting HTTP-cache max-age. */
+function fetchFresh(req) {
+  return fetch(new Request(req, { cache: 'no-cache' })).catch(() => fetch(req));
+}
 
 function cachePut(req, res) {
   if (res && res.ok && new URL(req.url).origin === self.location.origin) {
@@ -56,7 +66,7 @@ self.addEventListener('fetch', (event) => {
   // Network-first for HTML so iPhone PWA drops stale topbar (e.g. old Öffnen button)
   if (isHtml) {
     event.respondWith(
-      fetch(req)
+      fetchFresh(req)
         .then((res) => {
           cachePut(req, res);
           return res;
@@ -70,7 +80,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(req).then((cached) => {
-      const fetched = fetch(req)
+      const fetched = fetchFresh(req)
         .then((res) => {
           cachePut(req, res);
           return res;
