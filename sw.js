@@ -1,5 +1,5 @@
 /* Bauteile Suchen service worker — cache shell for offline */
-const CACHE = 'bauteile-suchen-v1-2-1';
+const CACHE = 'bauteile-suchen-v1-2-2';
 const ASSETS = [
   './',
   './index.html',

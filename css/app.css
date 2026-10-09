@@ -8,7 +8,8 @@
   --accent: #dd007a;
   --accent-border: #a8005c;
   --accent2: #3b82f6;
-  --ok: #15803d;
+  --ok: #3dba6f; /* Schaltkreise program-success green */
+  --ok-bg: rgba(61, 186, 111, 0.12);
   --warn: #b45309;
   --touch: 44px;
   --radius: 10px;
@@ -1018,4 +1019,94 @@ button, input { font: inherit; color: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   .code-card.shake { animation: none; }
+}
+
+/* Code dialog success — Schaltkreise .program-area.success / .btn-program.success */
+.code-card.success {
+  border: 2px solid #3dba6f;
+  background: linear-gradient(180deg, var(--ok-bg), #ffffff);
+  box-shadow: 0 0 0 3px rgba(61, 186, 111, 0.3), 0 24px 64px rgba(0, 0, 0, 0.12);
+}
+.code-card.success .code-icon {
+  box-shadow: 0 8px 24px rgba(61, 186, 111, 0.28); /* no pink bleed into success card */
+}
+.code-card.success .code-input,
+.code-card.success .code-input:focus,
+.code-card.success .code-input:disabled {
+  border-color: #3dba6f !important;
+  caret-color: #3dba6f;
+  opacity: 1; /* override .code-input:disabled { opacity: 0.55 } — no washed/pink look */
+  box-shadow: none;
+}
+.code-card.success .welcome-btn.primary,
+.code-card.success .welcome-btn.primary:disabled,
+.code-card.success .welcome-btn.primary.success,
+.welcome-btn.primary.success,
+#codeOk.success,
+#codeOk.success:disabled {
+  background: #3dba6f !important;
+  border-color: #3dba6f !important;
+  color: #fff !important;
+  opacity: 1 !important; /* override .btn:disabled { opacity: 0.45 } */
+  filter: none !important;
+  font-weight: 700;
+  cursor: default;
+}
+.code-card.success .welcome-btn.primary:hover,
+.code-card.success .welcome-btn.primary:focus-visible,
+.code-card.success .welcome-btn.primary:disabled:hover,
+#codeOk.success:hover,
+#codeOk.success:focus-visible,
+#codeOk.success:disabled:hover {
+  background: #3dba6f !important;
+  border-color: #3dba6f !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .code-dialog {
+    background: rgba(15, 20, 25, 0.55);
+  }
+  .code-card {
+    background: #1a222c;
+    border-color: #2a3644;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(221, 0, 122, 0.12);
+  }
+  .code-card.success {
+    background: linear-gradient(180deg, var(--ok-bg), #1a222c);
+    border: 2px solid #3dba6f;
+    box-shadow: 0 0 0 3px rgba(61, 186, 111, 0.3), 0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+  .code-card.success .code-input,
+  .code-card.success .code-input:focus,
+  .code-card.success .code-input:disabled {
+    border-color: #3dba6f !important;
+    background: #0f1419;
+    opacity: 1;
+  }
+  .code-card.success .welcome-btn.primary,
+  .code-card.success .welcome-btn.primary:disabled,
+  #codeOk.success,
+  #codeOk.success:disabled {
+    background: #3dba6f !important;
+    border-color: #3dba6f !important;
+    color: #fff !important;
+    opacity: 1 !important;
+  }
+  .code-title { color: #e8eef4; }
+  .code-text { color: #8b9aab; }
+  .code-card.title-only .code-text { color: #e8eef4; }
+  .code-input {
+    background: #0f1419;
+    border-color: #2a3644;
+    color: #e8eef4;
+  }
+  .code-error { color: #ff8aa0; }
+  .code-actions .welcome-btn:not(.primary) {
+    background: #212b36;
+    border-color: #2a3644;
+    color: #e8eef4;
+  }
 }

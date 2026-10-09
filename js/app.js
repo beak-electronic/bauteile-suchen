@@ -28,7 +28,7 @@ import {
   CODE_LENGTH,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.2.1';
+const VERSION = 'V1.2.2';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -2078,8 +2078,8 @@ async function saveProject() {
     let master = await getStoredMasterKey();
     if (!master) {
       const code = await showCodeSetDialog({
-        text: 'Code für geschützte Dateien eingeben:',
-        confirmText: 'Code zur Bestätigung wiederholen.',
+        text: 'Code für geschützte Dateien eingeben',
+        confirmText: 'Code zur Bestätigung wiederholen',
       });
       if (!code) {
         setStatus('Sichern abgebrochen.');
@@ -2177,6 +2177,12 @@ async function unlockEncryptedProject(outer, manifest) {
     const ok = await showCodeDialog({
       title: 'Datei ist geschützt.',
       text: 'Bitte 6-stelligen Code eingeben.',
+      onSuccess: () => {
+        // Hide welcome under the dialog before it closes — avoids a flash of the
+        // welcome screen between dialog dismiss and project load completing.
+        state.welcomeDismissed = true;
+        showWelcome(false);
+      },
       verify: async (code) => {
         const m = await deriveMasterKey(code);
         if (!(await verifyMasterKey(m, manifest))) return false;
@@ -2193,12 +2199,33 @@ async function unlockEncryptedProject(outer, manifest) {
 // ---------------------------------------------------------------- Code dialog
 let codeFailCount = 0; // brute-force friction (per session): 1s, 2s, 4s … max 30s after wrong codes
 let codeDialogBusy = false;
+const CODE_SUCCESS_MS = 700; // green success hold (Schaltkreise-style) before dialog closes
+
+function paintCodeSuccess(form, okBtn) {
+  form.classList.remove('shake');
+  form.classList.add('success');
+  okBtn.classList.add('success');
+  okBtn.textContent = '✓ OK';
+  okBtn.disabled = true;
+  const input = document.getElementById('codeInput');
+  if (input) {
+    input.disabled = true;
+    try { input.blur(); } catch (_) {}
+  }
+}
+
+function clearCodeSuccess(form, okBtn) {
+  form.classList.remove('success');
+  okBtn.classList.remove('success');
+  okBtn.textContent = 'OK';
+}
 
 /**
- * Modal 4-digit code dialog. `verify(code)` → true closes with OK, false = „Code falsch“.
+ * Modal 6-digit code dialog. `verify(code)` → true closes with OK, false = „Code falsch“.
+ * Optional `onSuccess()` runs after verify OK, before the green hold (e.g. hide welcome).
  * @returns {Promise<boolean>} true = OK & verified, false = Abbrechen
  */
-function showCodeDialog({ title, text, verify }) {
+function showCodeDialog({ title, text, verify, onSuccess }) {
   const dlg = document.getElementById('codeDialog');
   const form = document.getElementById('codeForm');
   const input = document.getElementById('codeInput');
@@ -2243,6 +2270,8 @@ function showCodeDialog({ title, text, verify }) {
       cancelBtn.removeEventListener('click', onCancel);
       dlg.removeEventListener('keydown', onKey);
       input.removeEventListener('input', onInput);
+      clearCodeSuccess(form, okBtn);
+      cancelBtn.disabled = false;
       dlg.hidden = true;
       input.value = '';
       err.textContent = '';
@@ -2283,6 +2312,16 @@ function showCodeDialog({ title, text, verify }) {
       checking = false;
       if (ok) {
         codeFailCount = 0;
+        try {
+          if (typeof onSuccess === 'function') onSuccess();
+        } catch (e) {
+          console.warn(e);
+        }
+        paintCodeSuccess(form, okBtn);
+        cancelBtn.disabled = true;
+        await new Promise((r) => { lockTimer = setTimeout(r, CODE_SUCCESS_MS); });
+        cancelBtn.disabled = false;
+        clearCodeSuccess(form, okBtn);
         finish(true);
         return;
       }
@@ -2315,7 +2354,7 @@ function showCodeDialog({ title, text, verify }) {
  */
 function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
   const step1Text = text || 'Neuen 6-stelligen Code eingeben.';
-  const step2Text = confirmText || 'Code zur Bestätigung wiederholen.';
+  const step2Text = confirmText || 'Code zur Bestätigung wiederholen';
   const mismatch = mismatchText || 'Codes stimmen nicht überein';
   const dlg = document.getElementById('codeDialog');
   const form = document.getElementById('codeForm');
@@ -2359,6 +2398,8 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
       cancelBtn.removeEventListener('click', onCancel);
       dlg.removeEventListener('keydown', onKey);
       input.removeEventListener('input', onInput);
+      clearCodeSuccess(form, okBtn);
+      cancelBtn.disabled = false;
       dlg.hidden = true;
       input.value = '';
       err.textContent = '';
@@ -2404,7 +2445,15 @@ function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
       }
       const matched = first;
       first = null;
-      finish(matched);
+      input.disabled = true;
+      okBtn.disabled = true;
+      cancelBtn.disabled = true;
+      paintCodeSuccess(form, okBtn);
+      setTimeout(() => {
+        cancelBtn.disabled = false;
+        clearCodeSuccess(form, okBtn);
+        finish(matched);
+      }, CODE_SUCCESS_MS);
     };
     const onCancel = () => finish(null);
     const onKey = (ev) => {
@@ -2487,7 +2536,8 @@ async function openProjectFile(file, { handle = null } = {}) {
     if (loaded.stuecklisten) setBoms(loaded.stuecklisten);
     syncActiveVariantParts();
     updateVariantBar();
-    state.welcomeDismissed = false;
+    state.welcomeDismissed = true;
+    showWelcome(false);
 
     if (loaded.pdfBytes) {
       state.pdfName = loaded.pdfName;
@@ -2532,6 +2582,10 @@ async function openProjectFile(file, { handle = null } = {}) {
   } catch (e) {
     console.error(e);
     setStatus('Öffnen fehlgeschlagen: ' + (e.message || e));
+    if (!hasProjectContent()) {
+      state.welcomeDismissed = false;
+      updateWelcome();
+    }
   }
 }
 
@@ -2719,7 +2773,7 @@ document.getElementById('menuChangeCode')?.addEventListener('click', async () =>
     const code = await showCodeSetDialog({
       title: 'Code ändern',
       text: 'Neuen 6-stelligen Code eingeben.',
-      confirmText: 'Code zur Bestätigung wiederholen.',
+      confirmText: 'Code zur Bestätigung wiederholen',
     });
     if (!code) {
       showToast('Code ändern abgebrochen.');
