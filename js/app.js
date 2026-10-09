@@ -28,7 +28,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.3';
+const VERSION = 'V1.3.1';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -1404,10 +1404,15 @@ function partDotPositions() {
   return pts;
 }
 
+/** Drawn part-dot radius in image space (visual size). Screen radius = this × zoom. */
+function partDotRadiusImage() {
+  return Math.max(2, 3.2 / state.zoom);
+}
+
 function drawPartDots(ctx) {
   const pts = partDotPositions();
   if (!pts) return;
-  const r = Math.max(2, 3.2 / state.zoom);
+  const r = partDotRadiusImage();
   // Only dots in the visible region, one path + one fill (single composite).
   const vis = lastBoardSize ? visibleImageRect() : null;
   ctx.fillStyle = PART_DOT;
@@ -1422,8 +1427,8 @@ function drawPartDots(ctx) {
   ctx.fill();
 }
 
-/** Hit radius in CSS screen px (visual dot size unchanged). Desktop ~14, touch ~22. */
-function partHitRadiusCssPx() {
+/** Base minimum hit radius in CSS screen px. Desktop 14, touch 22. */
+function partHitBaseCssPx() {
   try {
     if (IS_IOS_TOUCH || window.matchMedia('(pointer: coarse)').matches) return 22;
   } catch (_) {
@@ -1432,7 +1437,18 @@ function partHitRadiusCssPx() {
   return 14;
 }
 
-/** Nearest part under image-space point within the screen-space hit radius (zoom-independent). */
+/**
+ * Hit radius in CSS screen px: at least the base minimum, and always covering the
+ * drawn dot plus margin so zoomed-in dots stay fully clickable.
+ * formula: max(baseMin, dotScreen×1.5, dotScreen+8) where dotScreen = partDotRadiusImage()×zoom
+ */
+function partHitRadiusCssPx() {
+  const base = partHitBaseCssPx();
+  const dotScreen = partDotRadiusImage() * state.zoom; // = max(2×zoom, 3.2)
+  return Math.max(base, dotScreen * 1.5, dotScreen + 8);
+}
+
+/** Nearest part under image-space point within the screen-space hit radius. */
 function hitTestPartAt(imgX, imgY) {
   if (!isCalibrated(state.cal, state.parts)) return null;
   const parts = partsWithPositions();
@@ -1669,18 +1685,20 @@ function drawInner() {
   drawPartDots(ctx);
   ctx.restore();
 
-  // Calibration markers (subtle)
-  if (state.cal.cal1.calId) {
-    ctx.fillStyle = '#e11d48';
-    ctx.beginPath();
-    ctx.arc(state.cal.cal1.calX, state.cal.cal1.calY, 4 / state.zoom, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  if (state.cal.cal2.calId) {
-    ctx.fillStyle = '#e11d48';
-    ctx.beginPath();
-    ctx.arc(state.cal.cal2.calX, state.cal.cal2.calY, 4 / state.zoom, 0, Math.PI * 2);
-    ctx.fill();
+  // Calibration markers: only while placing reference points (not after cal is complete)
+  if (!isCalibrated(state.cal, state.parts)) {
+    if (state.cal.cal1.calId) {
+      ctx.fillStyle = '#e11d48';
+      ctx.beginPath();
+      ctx.arc(state.cal.cal1.calX, state.cal.cal1.calY, 4 / state.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (state.cal.cal2.calId) {
+      ctx.fillStyle = '#e11d48';
+      ctx.beginPath();
+      ctx.arc(state.cal.cal2.calX, state.cal.cal2.calY, 4 / state.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Pending click cursor: light gray (search hit stays pink ACCENT)
