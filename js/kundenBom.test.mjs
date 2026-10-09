@@ -64,7 +64,9 @@ assertEq(replaced, 3, 'replaced count');
 assertEq(total, 4, 'total');
 assertEq(parts[0].value, '100 nF / 100 V / X7R / RM 5,0', 'C1 applied value');
 assertEq(partSearchLabel(parts[0]), 'C1 · 100 nF / 100 V / X7R / RM 5,0 (1.218)', 'C1 label');
-assertEq(parts[3].value, 'UNMATCHED', 'unmatched kept');
+assertEq(parts[3].value, 'n.b.', 'unmatched → n.b.');
+assertEq(parts[3].description, '', 'unmatched no BEAK desc');
+assertEq(partSearchLabel(parts[3]), 'R999 · n.b.', 'unmatched label');
 
 // examples
 const examples = ['C1', 'R2', 'R5', 'IC1', 'U5', 'KL151', '5'];

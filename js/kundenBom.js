@@ -378,32 +378,51 @@ export async function parseKundenBomPdf(pdfjsLib, bytes) {
   }
 }
 
+/** Placeholder value for refs missing from an active Kunden-Stückliste replace map. */
+export const PNP_VALUE_MISSING = 'n.b.';
+
 /**
  * Apply Kunden-Stückliste map to Pick&Place parts.
- * Sets value = Artikel-Beschreibung, description = BEAK digits (for label + Lagerplatz).
+ * Matched: value = Artikel-Beschreibung, description/beakNr = BEAK digits (Lagerplatz).
+ * Unmatched (when markMissing): value = „n.b.“, clear BEAK fields (no parentheses / Lagerplatz).
  * @param {object[]} parts
  * @param {Map|Record} byRef
- * @returns {{ replaced: number, total: number }}
+ * @param {{ markMissing?: boolean }} [opts]
+ * @returns {{ replaced: number, total: number, missing: number }}
  */
-export function applyKundenValuesToParts(parts, byRef) {
+export function applyKundenValuesToParts(parts, byRef, opts = {}) {
+  const markMissing = opts.markMissing !== false;
   const map =
     byRef instanceof Map
       ? byRef
       : new Map(Object.entries(byRef || {}).map(([k, v]) => [normalizeRef(k), v]));
   let replaced = 0;
+  let missing = 0;
   const total = (parts || []).length;
   for (const p of parts || []) {
     const hit = map.get(normalizeRef(p.id));
-    if (!hit) continue;
+    if (!hit) {
+      if (markMissing) {
+        p.value = PNP_VALUE_MISSING;
+        p.description = '';
+        p.beakNr = '';
+        if ('eigerPN' in p) p.eigerPN = '';
+        missing++;
+      }
+      continue;
+    }
     const key = hit.key || kundenBeakDigits(hit.beak);
     p.value = hit.value || p.value;
     if (key) {
       p.description = key;
       p.beakNr = key;
+    } else {
+      p.description = '';
+      p.beakNr = '';
     }
     replaced++;
   }
-  return { replaced, total };
+  return { replaced, total, missing };
 }
 
 /** Serialize byRef Map for projekt.json */
