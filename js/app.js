@@ -28,7 +28,7 @@ import {
   CODE_LENGTH,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.2';
+const VERSION = 'V1.2.1';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -2077,17 +2077,15 @@ async function saveProject() {
     // Always save protected: get (or set) this device's master key first — Abbrechen = don't save.
     let master = await getStoredMasterKey();
     if (!master) {
-      const ok = await showCodeDialog({
+      const code = await showCodeSetDialog({
         text: 'Code für geschützte Dateien eingeben:',
-        verify: async (code) => {
-          master = await deriveMasterKey(code);
-          return true;
-        },
+        confirmText: 'Code zur Bestätigung wiederholen.',
       });
-      if (!ok || !master) {
+      if (!code) {
         setStatus('Sichern abgebrochen.');
         return;
       }
+      master = await deriveMasterKey(code);
       await storeMasterKey(master);
     }
     const innerZip = await buildBsuZip({
@@ -2310,6 +2308,119 @@ function showCodeDialog({ title, text, verify }) {
     input.addEventListener('input', onInput);
   });
 }
+
+/**
+ * Two-step code entry (enter + repeat). Never persists the code itself — caller derives a key.
+ * @returns {Promise<string|null>} matching 6-digit code, or null if Abbrechen
+ */
+function showCodeSetDialog({ title, text, confirmText, mismatchText } = {}) {
+  const step1Text = text || 'Neuen 6-stelligen Code eingeben.';
+  const step2Text = confirmText || 'Code zur Bestätigung wiederholen.';
+  const mismatch = mismatchText || 'Codes stimmen nicht überein';
+  const dlg = document.getElementById('codeDialog');
+  const form = document.getElementById('codeForm');
+  const input = document.getElementById('codeInput');
+  const err = document.getElementById('codeError');
+  const okBtn = document.getElementById('codeOk');
+  const cancelBtn = document.getElementById('codeCancel');
+  const titleEl = document.getElementById('codeDialogTitle');
+  const textEl = document.getElementById('codeDialogText');
+  const applyPrompt = (prompt) => {
+    if (title) {
+      titleEl.textContent = title;
+      titleEl.hidden = false;
+      textEl.textContent = prompt;
+      textEl.hidden = false;
+      form.classList.remove('title-only');
+    } else {
+      titleEl.textContent = '';
+      titleEl.hidden = true;
+      textEl.textContent = prompt;
+      textEl.hidden = false;
+      form.classList.add('title-only');
+    }
+  };
+  applyPrompt(step1Text);
+  if (codeDialogBusy) return Promise.resolve(null);
+  codeDialogBusy = true;
+  input.value = '';
+  err.textContent = '';
+  input.disabled = false;
+  okBtn.disabled = false;
+  const prevFocus = document.activeElement;
+  dlg.hidden = false;
+  input.focus();
+
+  return new Promise((resolve) => {
+    let first = null; // only in memory for this dialog session
+    const finish = (result) => {
+      first = null;
+      form.removeEventListener('submit', onSubmit);
+      cancelBtn.removeEventListener('click', onCancel);
+      dlg.removeEventListener('keydown', onKey);
+      input.removeEventListener('input', onInput);
+      dlg.hidden = true;
+      input.value = '';
+      err.textContent = '';
+      codeDialogBusy = false;
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus({ preventScroll: true });
+      resolve(result);
+    };
+    const shake = (msg) => {
+      err.textContent = msg;
+      form.classList.remove('shake');
+      void form.offsetWidth;
+      form.classList.add('shake');
+      input.value = '';
+    };
+    const onInput = () => {
+      const digits = input.value.replace(/\D+/g, '').slice(0, CODE_LENGTH);
+      if (digits !== input.value) input.value = digits;
+      if (err.textContent && input.value) err.textContent = '';
+    };
+    const onSubmit = (ev) => {
+      ev.preventDefault();
+      if (input.disabled) return;
+      const code = input.value;
+      if (!isValidCode(code)) {
+        shake(`Bitte ${CODE_LENGTH} Ziffern eingeben`);
+        input.focus();
+        return;
+      }
+      if (first === null) {
+        first = code;
+        input.value = '';
+        err.textContent = '';
+        applyPrompt(step2Text);
+        input.focus();
+        return;
+      }
+      if (code !== first) {
+        first = null;
+        shake(mismatch);
+        applyPrompt(step1Text);
+        input.focus();
+        return;
+      }
+      const matched = first;
+      first = null;
+      finish(matched);
+    };
+    const onCancel = () => finish(null);
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(null);
+      }
+    };
+    form.addEventListener('submit', onSubmit);
+    cancelBtn.addEventListener('click', onCancel);
+    dlg.addEventListener('keydown', onKey);
+    input.addEventListener('input', onInput);
+  });
+}
+
 
 async function openProjectFile(file, { handle = null } = {}) {
   if (!file) return;
@@ -2601,6 +2712,26 @@ if (el.flipYBtn) el.flipYBtn.addEventListener('click', () => toggleCalFlip('flip
 if (el.flipPanelDone) el.flipPanelDone.addEventListener('click', hideFlipPanel);
 if (el.flipPanel) el.flipPanel.addEventListener('click', (ev) => {
   if (ev.target === el.flipPanel) hideFlipPanel();
+});
+document.getElementById('menuChangeCode')?.addEventListener('click', async () => {
+  openMenu(false);
+  try {
+    const code = await showCodeSetDialog({
+      title: 'Code ändern',
+      text: 'Neuen 6-stelligen Code eingeben.',
+      confirmText: 'Code zur Bestätigung wiederholen.',
+    });
+    if (!code) {
+      showToast('Code ändern abgebrochen.');
+      return;
+    }
+    const master = await deriveMasterKey(code);
+    await storeMasterKey(master);
+    showToast('Neuer Code gespeichert. Gilt ab dem nächsten Sichern.');
+  } catch (e) {
+    console.error(e);
+    showToast('Code konnte nicht geändert werden: ' + (e.message || e));
+  }
 });
 document.getElementById('menuForgetCode')?.addEventListener('click', async () => {
   openMenu(false);
