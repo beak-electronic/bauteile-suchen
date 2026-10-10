@@ -37,7 +37,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.5.5';
+const VERSION = 'V1.5.6';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -60,6 +60,7 @@ const el = {
   suggestions: document.getElementById('suggestions'),
   boardWrap: document.getElementById('boardWrap'),
   canvas: document.getElementById('boardCanvas'),
+  overlay: document.getElementById('boardOverlay'),
   empty: document.getElementById('emptyState'),
   pdfInput: document.getElementById('pdfInput'),
   pnpInput: document.getElementById('pnpInput'),
@@ -1529,6 +1530,10 @@ function fitView() {
 }
 
 
+function isDarkUi() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (_) { return false; }
+}
+
 function drawCrosshair(ctx, x, y, color) {
   // Constant on-screen size (CSS px): draw in a local space that undoes ctx.scale(zoom).
   // Matches the Einpassen (fit) look at every zoom level.
@@ -1537,25 +1542,30 @@ function drawCrosshair(ctx, x, y, color) {
   const gap = 6;
   const ring = 5;
   const lw = 2.5;
+  const dark = isDarkUi();
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(1 / z, 1 / z);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lw;
-  ctx.beginPath();
-  ctx.moveTo(-arm, 0);
-  ctx.lineTo(-gap, 0);
-  ctx.moveTo(gap, 0);
-  ctx.lineTo(arm, 0);
-  ctx.moveTo(0, -arm);
-  ctx.lineTo(0, -gap);
-  ctx.moveTo(0, gap);
-  ctx.lineTo(0, arm);
-  ctx.stroke();
-  // center ring
-  ctx.beginPath();
-  ctx.arc(0, 0, ring, 0, Math.PI * 2);
-  ctx.stroke();
+  const stroke = (strokeColor, width) => {
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(-arm, 0);
+    ctx.lineTo(-gap, 0);
+    ctx.moveTo(gap, 0);
+    ctx.lineTo(arm, 0);
+    ctx.moveTo(0, -arm);
+    ctx.lineTo(0, -gap);
+    ctx.moveTo(0, gap);
+    ctx.lineTo(0, arm);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, ring, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+  // Dark/inverted plan: light halo so pink stays readable
+  if (dark) stroke('rgba(255,255,255,0.92)', lw + 3);
+  stroke(color, lw);
   ctx.restore();
 }
 
@@ -1600,12 +1610,31 @@ function drawPartDots(ctx) {
   const r = partDotRadiusImage();
   // Only dots in the visible region, one path + one fill (single composite).
   const vis = lastBoardSize ? visibleImageRect() : null;
-  ctx.fillStyle = PART_DOT;
-  ctx.beginPath();
+  const dark = isDarkUi();
+  const collect = [];
   for (let i = 0; i < pts.length; i += 2) {
     const x = pts[i];
     const y = pts[i + 1];
     if (vis && (x < vis.x - r || y < vis.y - r || x > vis.x + vis.w + r || y > vis.y + vis.h + r)) continue;
+    collect.push(x, y);
+  }
+  if (!collect.length) return;
+  if (dark) {
+    // Soft light halo under pink dots on inverted (often dark) plan
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    const rh = r * 1.55;
+    for (let i = 0; i < collect.length; i += 2) {
+      const x = collect[i], y = collect[i + 1];
+      ctx.moveTo(x + rh, y);
+      ctx.arc(x, y, rh, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  ctx.fillStyle = dark ? 'rgba(255, 105, 180, 0.95)' : PART_DOT; /* hotter pink in dark */
+  ctx.beginPath();
+  for (let i = 0; i < collect.length; i += 2) {
+    const x = collect[i], y = collect[i + 1];
     ctx.moveTo(x + r, y);
     ctx.arc(x, y, r, 0, Math.PI * 2);
   }
@@ -1822,6 +1851,19 @@ function draw() {
   if (perfDebug) perfDebug.drawMs.push(performance.now() - t0);
 }
 
+function syncCanvasCssSize(canvas, cssW, cssH, dpr) {
+  if (!canvas) return null;
+  const bw = Math.max(1, Math.floor(cssW * dpr));
+  const bh = Math.max(1, Math.floor(cssH * dpr));
+  if (canvas.width !== bw) canvas.width = bw;
+  if (canvas.height !== bh) canvas.height = bh;
+  if (canvas.style.width !== cssW + 'px') canvas.style.width = cssW + 'px';
+  if (canvas.style.height !== cssH + 'px') canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
 function drawInner() {
   if (drawRaf) {
     cancelAnimationFrame(drawRaf);
@@ -1829,6 +1871,7 @@ function drawInner() {
   }
   updateSearchLager();
   const canvas = el.canvas;
+  const overlay = el.overlay;
   const wrap = el.boardWrap;
   const dpr = window.devicePixelRatio || 1;
   const moving = isInteracting();
@@ -1840,18 +1883,15 @@ function drawInner() {
   if (wrap.style.height !== cssH + 'px') {
     wrap.style.height = cssH + 'px';
   }
-  // Only (re)allocate the backing store when the size actually changes.
-  const bw = Math.max(1, Math.floor(cssW * dpr));
-  const bh = Math.max(1, Math.floor(cssH * dpr));
-  if (canvas.width !== bw) canvas.width = bw;
-  if (canvas.height !== bh) canvas.height = bh;
-  if (canvas.style.width !== cssW + 'px') canvas.style.width = cssW + 'px';
-  if (canvas.style.height !== cssH + 'px') canvas.style.height = cssH + 'px';
-  const ctx = canvas.getContext('2d');
+  const ctx = syncCanvasCssSize(canvas, cssW, cssH, dpr);
+  const octx = syncCanvasCssSize(overlay, cssW, cssH, dpr);
   ctx.globalCompositeOperation = 'source-over';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#ffffff'; // white letterboxing; board paints over when zoomed
+  ctx.fillStyle = '#ffffff'; // white letterboxing; CSS-inverted to near-black in dark mode
   ctx.fillRect(0, 0, cssW, cssH);
+  if (octx) {
+    octx.globalCompositeOperation = 'source-over';
+    octx.clearRect(0, 0, cssW, cssH);
+  }
 
   if (!state.pageBitmap) return;
   if (state.pendingFit) fitView();
@@ -1862,9 +1902,6 @@ function drawInner() {
   // Hi-res PDF tiles are larger than pageW×pageH; always map into image space.
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = moving && PERF.lowSmoothingWhileMoving ? 'low' : 'high';
-  // Board bitmap with plain source-over (fast path), then the part dots with multiply:
-  // multiply commutes, so white≈pink and black/dark ink covers the dots exactly as
-  // before — but only the small dots are blended, not the whole page each frame.
   const vis = visibleImageRect();
   const tile = state.pdfTile && state.pdfTile.scale > state.pdfBmpScale ? state.pdfTile : null;
   // Base is skipped when the sharp tile already covers the whole visible area.
@@ -1873,44 +1910,53 @@ function drawInner() {
   }
   // Sharp viewport tile (deep zoom) over the base in its region (pdf.js tiles are opaque).
   if (tile) {
-    // Tile pixels ≈ device pixels (settled view) → resampling is pointless, skip smoothing.
     const ratio = tile.scale / (state.zoom * dpr);
     const oneToOne = ratio > 0.97 && ratio < 1.03;
     if (oneToOne) ctx.imageSmoothingEnabled = false;
     drawBitmapVisible(ctx, tile.canvas, tile, vis);
     ctx.imageSmoothingEnabled = true;
   }
-  ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  drawPartDots(ctx);
+  // Light: pink dots under ink via multiply on the board canvas.
+  // Dark: board canvas is CSS-inverted — draw ALL markers on overlay (not inverted).
+  const darkUi = isDarkUi();
+  if (!darkUi) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    drawPartDots(ctx);
+    ctx.restore();
+  }
   ctx.restore();
+
+  const mctx = octx || ctx;
+  mctx.save();
+  mctx.translate(state.pan.x, state.pan.y);
+  mctx.scale(state.zoom, state.zoom);
+  mctx.globalCompositeOperation = 'source-over';
+  if (darkUi) drawPartDots(mctx);
 
   // Calibration markers: only while placing reference points (not after cal is complete)
   if (!isCalibrated(state.cal, state.parts)) {
     if (state.cal.cal1.calId) {
-      ctx.fillStyle = '#e11d48';
-      ctx.beginPath();
-      ctx.arc(state.cal.cal1.calX, state.cal.cal1.calY, 4 / state.zoom, 0, Math.PI * 2);
-      ctx.fill();
+      mctx.fillStyle = '#e11d48';
+      mctx.beginPath();
+      mctx.arc(state.cal.cal1.calX, state.cal.cal1.calY, 4 / state.zoom, 0, Math.PI * 2);
+      mctx.fill();
     }
     if (state.cal.cal2.calId) {
-      ctx.fillStyle = '#e11d48';
-      ctx.beginPath();
-      ctx.arc(state.cal.cal2.calX, state.cal.cal2.calY, 4 / state.zoom, 0, Math.PI * 2);
-      ctx.fill();
+      mctx.fillStyle = '#e11d48';
+      mctx.beginPath();
+      mctx.arc(state.cal.cal2.calX, state.cal.cal2.calY, 4 / state.zoom, 0, Math.PI * 2);
+      mctx.fill();
     }
   }
 
-  // Pending click cursor: light gray (search hit stays pink ACCENT)
   if (state.cursorPos) {
-    drawCrosshair(ctx, state.cursorPos.x, state.cursorPos.y, CURSOR_GRAY);
+    drawCrosshair(mctx, state.cursorPos.x, state.cursorPos.y, CURSOR_GRAY);
   }
-
-  // Search hit pink crosshair
   if (state.crosshair) {
-    drawCrosshair(ctx, state.crosshair.x, state.crosshair.y, ACCENT);
+    drawCrosshair(mctx, state.crosshair.x, state.crosshair.y, ACCENT);
   }
-  ctx.restore();
+  mctx.restore();
   updateCalSetBtn();
   // Safari backdrop re-sample hack: skip while moving (re-blur per frame is costly); settle draw does it.
   if (!moving) {
@@ -3353,6 +3399,18 @@ if ('serviceWorker' in navigator) {
 }
 
 syncChromeOffset();
+
+
+// Live appearance switch: re-draw so markers move between board/overlay layers
+try {
+  const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const onScheme = () => {
+    try { if (typeof window.__syncThemeChrome === 'function') window.__syncThemeChrome(); } catch (_) {}
+    draw();
+  };
+  if (mqDark.addEventListener) mqDark.addEventListener('change', onScheme);
+  else if (mqDark.addListener) mqDark.addListener(onScheme);
+} catch (_) {}
 
 window.addEventListener('orientationchange', () => {
   scheduleTouchOrientFit('orientationchange');

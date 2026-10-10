@@ -577,6 +577,18 @@ button, input { font: inherit; color: inherit; }
   min-height: 100%;
   touch-action: none;
 }
+.board-overlay {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  pointer-events: none; /* hit-test stays on #boardCanvas */
+  touch-action: none;
+  z-index: 2;
+}
 
 
 /* Calibration needed — white-theme mirror of Bestückungsplan .cal-needed-banner */
@@ -1372,4 +1384,108 @@ button, input { font: inherit; color: inherit; }
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: #f2f2f7;
   }
+}
+
+/* ==== Open-app dark mode (chrome + inverted PDF; markers stay on overlay) ==== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0d;
+    --panel: #2c2c2e;
+    --panel2: #1c1c1e;
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f2f2f7;
+    --muted: #98989f;
+  }
+  html, body, .app {
+    background: #0b0b0d;
+    color: #f2f2f7;
+  }
+  .board-section,
+  .board-wrap {
+    background: #0b0b0d;
+  }
+  /* Invert PDF/letterbox only — markers live on .board-overlay */
+  .board-canvas {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  .chrome::before {
+    background: rgba(28, 28, 30, 0.72);
+  }
+  .title { color: #f2f2f7; }
+  .menu-btn,
+  .btn {
+    background: #2c2c2e;
+    color: #f2f2f7;
+    border-color: transparent;
+  }
+  .btn:hover, .btn:focus-visible {
+    border-color: var(--accent);
+  }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent-border);
+    color: #fff;
+  }
+  .btn.warn {
+    color: #fbbf24;
+    border-color: #854d0e;
+    background: #422006;
+  }
+  .drawer {
+    background: rgba(28, 28, 30, 0.92);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+  .drawer-section { color: #98989f; }
+  .drawer-subheader { color: #f2f2f7; }
+  .drawer .btn.block {
+    background: #2c2c2e;
+    color: #f2f2f7;
+  }
+  .drawer .btn.block.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .search-bar .input,
+  #searchInput.input,
+  .input {
+    background: rgba(44, 44, 46, 0.88);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+  .input::placeholder { color: #6b6b70; }
+  .search-lager { color: var(--accent); }
+  .suggestions {
+    background: rgba(28, 28, 30, 0.92);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+  .sug-item:hover, .sug-item:focus, .sug-item.active {
+    background: rgba(221, 0, 122, 0.22);
+  }
+  .app-toast {
+    color: #f2f2f7;
+    background: rgba(28, 28, 30, 0.88);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  .cal-needed-banner {
+    color: #fbbf24;
+    background: #422006;
+    border-color: #854d0e;
+  }
+  .board-h-btn {
+    background: rgba(44, 44, 46, 0.85);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+  .empty-state {
+    color: #f2f2f7;
+    background: rgba(28, 28, 30, 0.88);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  .empty-state-optional { color: #98989f; }
+  .menu-backdrop {
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .hit-info { color: #98989f; }
 }

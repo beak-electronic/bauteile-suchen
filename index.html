@@ -193,7 +193,9 @@
           <div class="cal-needed-banner" id="calNeededBanner" hidden>Kalibrierung für dieses Bild erforderlich</div>
           <div class="app-toast" id="appToast" role="status" aria-live="polite" hidden></div>
           <button type="button" class="btn warn cal-set-btn" id="calSetBtn" hidden>Kalibrierung setzen</button>
-          <canvas class="board-canvas" id="boardCanvas"></canvas>
+          <canvas class="board-canvas" id="boardCanvas" aria-hidden="false"></canvas>
+          <!-- Markers (dots/crosshair/cal) — not CSS-inverted in dark mode -->
+          <canvas class="board-overlay" id="boardOverlay" aria-hidden="true"></canvas>
           <div class="board-zoom-btns" id="boardZoomBtns" hidden>
             <button type="button" class="btn sm board-h-btn" id="btnZoomFit" title="Einpassen" aria-label="Einpassen">⛶</button>
           </div>
@@ -244,7 +246,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.5</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.6</p>
         </div>
       </div>
 
