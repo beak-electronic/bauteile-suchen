@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)" />
-    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="msapplication-navbutton-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <!-- default + theme-color: iOS paints status bar from theme-color (must update on appearance change) -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Bauteile Suchen" />
     <meta name="description" content="Bauteile Suchen — Bauteil auf Bestückungsplan-PDF per Fadenkreuz finden" />
@@ -39,6 +40,72 @@
           var ipad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
           if (ipad) document.documentElement.classList.add('ipad');
         } catch (e) {}
+
+        /* Sync iOS/PWA status bar (theme-color) when system appearance changes.
+           WebKit often ignores media= theme-color updates until rotate — force by
+           rewriting meta nodes + html/body color-scheme/background. */
+        var THEME_LIGHT = '#ffffff';
+        var THEME_DARK = '#0b0b0d'; /* welcome / dark page surface */
+        function syncThemeChrome() {
+          try {
+            var dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var color = dark ? THEME_DARK : THEME_LIGHT;
+            var root = document.documentElement;
+            var body = document.body;
+            root.style.colorScheme = dark ? 'dark' : 'light';
+            if (body) {
+              body.style.colorScheme = dark ? 'dark' : 'light';
+              /* Keep letterbox white in light; in dark match status/welcome surface */
+              body.style.backgroundColor = color;
+            }
+            root.style.backgroundColor = color;
+
+            var head = document.head;
+            if (!head) return;
+            /* Remove all theme-color metas and re-insert (WebKit status-bar refresh) */
+            var old = head.querySelectorAll('meta[name="theme-color"]');
+            for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
+
+            function addMeta(content, media) {
+              var m = document.createElement('meta');
+              m.setAttribute('name', 'theme-color');
+              m.setAttribute('content', content);
+              if (media) m.setAttribute('media', media);
+              head.insertBefore(m, head.firstChild);
+              return m;
+            }
+            addMeta(color); /* live / fallback — iOS reads this first */
+            addMeta(THEME_LIGHT, '(prefers-color-scheme: light)');
+            addMeta(THEME_DARK, '(prefers-color-scheme: dark)');
+
+            var cs = head.querySelector('meta[name="color-scheme"]');
+            if (!cs) {
+              cs = document.createElement('meta');
+              cs.setAttribute('name', 'color-scheme');
+              head.appendChild(cs);
+            }
+            cs.setAttribute('content', 'light dark');
+
+            var nav = head.querySelector('meta[name="msapplication-navbutton-color"]');
+            if (nav) nav.setAttribute('content', color);
+
+            /* Forced reflow — nudges WebKit to re-sample status bar chrome */
+            void root.offsetHeight;
+            if (body) void body.offsetHeight;
+          } catch (e) {}
+        }
+        window.__syncThemeChrome = syncThemeChrome;
+        syncThemeChrome();
+        try {
+          var mq = window.matchMedia('(prefers-color-scheme: dark)');
+          var onChange = function () { syncThemeChrome(); };
+          if (mq.addEventListener) mq.addEventListener('change', onChange);
+          else if (mq.addListener) mq.addListener(onChange);
+        } catch (e) {}
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') syncThemeChrome();
+        });
+        window.addEventListener('pageshow', function () { syncThemeChrome(); });
       })();
     </script>
     <div class="ios-pwa-status-strip" aria-hidden="true"></div>
@@ -177,7 +244,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.4</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.5</p>
         </div>
       </div>
 
