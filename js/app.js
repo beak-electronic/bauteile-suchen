@@ -37,11 +37,14 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.5.7';
+const VERSION = 'V1.5.8';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
 const PART_DOT = 'rgba(249, 168, 212, 0.85)'; // light pink — all parts after calibration
+/** Pre-invert multiply color: after canvas difference+white → PART_DOT pink.
+ *  Drawing dots with multiply *before* invert mirrors light mode so plan ink stays on top. */
+const PART_DOT_PRE_INVERT = 'rgba(6, 87, 43, 0.85)'; // 255 - PART_DOT RGB
 const CURSOR_HIDE_MS = 5000;
 const REFS_ONLY_ID = '__refs_only__';
 const REFS_ONLY_LABEL = 'Nur Bauteil Referenzen';
@@ -1598,65 +1601,18 @@ function partDotRadiusImage() {
   return Math.max(2, 3.2 / state.zoom);
 }
 
-function drawPartDots(ctx) {
+function drawPartDots(ctx, fillStyle = PART_DOT) {
   const pts = partDotPositions();
   if (!pts) return;
   const r = partDotRadiusImage();
   // Only dots in the visible region, one path + one fill (single composite).
   const vis = lastBoardSize ? visibleImageRect() : null;
-  const dark = isDarkUi();
-  const collect = [];
+  ctx.fillStyle = fillStyle;
+  ctx.beginPath();
   for (let i = 0; i < pts.length; i += 2) {
     const x = pts[i];
     const y = pts[i + 1];
     if (vis && (x < vis.x - r || y < vis.y - r || x > vis.x + vis.w + r || y > vis.y + vis.h + r)) continue;
-    collect.push(x, y);
-  }
-  if (!collect.length) return;
-  // Dark: black hit-outline (source-over), then pink via screen so light plan lines stay on top.
-  // Light: caller sets multiply — pink under black ink.
-  if (dark) {
-    ctx.save();
-    const z = state.zoom || 1;
-    const rh = r * 1.45;
-    // Black hit disc first (source-over) — reads as dark outline, never a white halo.
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
-    ctx.beginPath();
-    for (let i = 0; i < collect.length; i += 2) {
-      const x = collect[i], y = collect[i + 1];
-      ctx.moveTo(x + rh, y);
-      ctx.arc(x, y, rh, 0, Math.PI * 2);
-    }
-    ctx.fill();
-    // Pink under light plan lines (post-invert): screen keeps white ink on top.
-    ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = PART_DOT;
-    ctx.beginPath();
-    for (let i = 0; i < collect.length; i += 2) {
-      const x = collect[i], y = collect[i + 1];
-      ctx.moveTo(x + r, y);
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-    }
-    ctx.fill();
-    // Crisp black ring (~2.5 CSS px) around the pink.
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
-    ctx.lineWidth = 2.5 / z;
-    ctx.beginPath();
-    for (let i = 0; i < collect.length; i += 2) {
-      const x = collect[i], y = collect[i + 1];
-      ctx.moveTo(x + r, y);
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-    }
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-  ctx.fillStyle = PART_DOT;
-  ctx.beginPath();
-  for (let i = 0; i < collect.length; i += 2) {
-    const x = collect[i], y = collect[i + 1];
     ctx.moveTo(x + r, y);
     ctx.arc(x, y, r, 0, Math.PI * 2);
   }
@@ -1938,31 +1894,26 @@ function drawInner() {
     drawBitmapVisible(ctx, tile.canvas, tile, vis);
     ctx.imageSmoothingEnabled = true;
   }
-  // Bitmaps drawn (light PDF on white). Invert in-canvas for dark — no CSS filter
-  // (WebKit would allocate a second full-size buffer for invert+hue-rotate and OOM on iPhone).
-  // Plain invert via difference+white (no hue pass): fine for B/W assembly drawings.
+  // Dots under plan ink via multiply (same path light + dark, including sharp tiles).
+  // Dark: use PART_DOT_PRE_INVERT so after difference+white the dots read as PART_DOT pink
+  // while white/black plan ink stays on top — mirrors light multiply. No source-over halo
+  // (that painted over white labels). No CSS filter (iOS memory).
   const darkUi = isDarkUi();
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  drawPartDots(ctx, darkUi ? PART_DOT_PRE_INVERT : PART_DOT);
+  ctx.restore();
+
   ctx.restore(); // back to CSS-pixel space (dpr transform only)
 
   if (darkUi) {
+    // Plain invert via difference+white (no hue pass): fine for B/W assembly drawings.
     ctx.save();
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, cssW, cssH);
     ctx.restore();
   }
-
-  // Dots on board canvas under plan lines: multiply (light) / screen after invert (dark).
-  ctx.save();
-  ctx.translate(state.pan.x, state.pan.y);
-  ctx.scale(state.zoom, state.zoom);
-  if (darkUi) {
-    drawPartDots(ctx); // sets screen + black halo internally
-  } else {
-    ctx.globalCompositeOperation = 'multiply';
-    drawPartDots(ctx);
-  }
-  ctx.restore();
 
   // Overlay: crosshair / cal markers only (same in light and dark — not under plan ink).
   const mctx = octx || ctx;
