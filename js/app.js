@@ -37,7 +37,7 @@ import {
   sanitizeCodeInput,
 } from './projectCrypto.js';
 
-const VERSION = 'V1.5.6';
+const VERSION = 'V1.5.7';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -1536,36 +1536,30 @@ function isDarkUi() {
 
 function drawCrosshair(ctx, x, y, color) {
   // Constant on-screen size (CSS px): draw in a local space that undoes ctx.scale(zoom).
-  // Matches the Einpassen (fit) look at every zoom level.
+  // Matches the Einpassen (fit) look at every zoom level. Same in light and dark (no halo).
   const z = state.zoom || 1;
   const arm = 28;
   const gap = 6;
   const ring = 5;
   const lw = 2.5;
-  const dark = isDarkUi();
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(1 / z, 1 / z);
-  const stroke = (strokeColor, width) => {
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(-arm, 0);
-    ctx.lineTo(-gap, 0);
-    ctx.moveTo(gap, 0);
-    ctx.lineTo(arm, 0);
-    ctx.moveTo(0, -arm);
-    ctx.lineTo(0, -gap);
-    ctx.moveTo(0, gap);
-    ctx.lineTo(0, arm);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, ring, 0, Math.PI * 2);
-    ctx.stroke();
-  };
-  // Dark/inverted plan: light halo so pink stays readable
-  if (dark) stroke('rgba(255,255,255,0.92)', lw + 3);
-  stroke(color, lw);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.moveTo(-arm, 0);
+  ctx.lineTo(-gap, 0);
+  ctx.moveTo(gap, 0);
+  ctx.lineTo(arm, 0);
+  ctx.moveTo(0, -arm);
+  ctx.lineTo(0, -gap);
+  ctx.moveTo(0, gap);
+  ctx.lineTo(0, arm);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, ring, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1619,19 +1613,47 @@ function drawPartDots(ctx) {
     collect.push(x, y);
   }
   if (!collect.length) return;
+  // Dark: black hit-outline (source-over), then pink via screen so light plan lines stay on top.
+  // Light: caller sets multiply — pink under black ink.
   if (dark) {
-    // Soft light halo under pink dots on inverted (often dark) plan
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.save();
+    const z = state.zoom || 1;
+    const rh = r * 1.45;
+    // Black hit disc first (source-over) — reads as dark outline, never a white halo.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
     ctx.beginPath();
-    const rh = r * 1.55;
     for (let i = 0; i < collect.length; i += 2) {
       const x = collect[i], y = collect[i + 1];
       ctx.moveTo(x + rh, y);
       ctx.arc(x, y, rh, 0, Math.PI * 2);
     }
     ctx.fill();
+    // Pink under light plan lines (post-invert): screen keeps white ink on top.
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = PART_DOT;
+    ctx.beginPath();
+    for (let i = 0; i < collect.length; i += 2) {
+      const x = collect[i], y = collect[i + 1];
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    // Crisp black ring (~2.5 CSS px) around the pink.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
+    ctx.lineWidth = 2.5 / z;
+    ctx.beginPath();
+    for (let i = 0; i < collect.length; i += 2) {
+      const x = collect[i], y = collect[i + 1];
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+    ctx.restore();
+    return;
   }
-  ctx.fillStyle = dark ? 'rgba(255, 105, 180, 0.95)' : PART_DOT; /* hotter pink in dark */
+  ctx.fillStyle = PART_DOT;
   ctx.beginPath();
   for (let i = 0; i < collect.length; i += 2) {
     const x = collect[i], y = collect[i + 1];
@@ -1886,7 +1908,7 @@ function drawInner() {
   const ctx = syncCanvasCssSize(canvas, cssW, cssH, dpr);
   const octx = syncCanvasCssSize(overlay, cssW, cssH, dpr);
   ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = '#ffffff'; // white letterboxing; CSS-inverted to near-black in dark mode
+  ctx.fillStyle = '#ffffff'; // white letterboxing; dark mode inverts via difference → near-black
   ctx.fillRect(0, 0, cssW, cssH);
   if (octx) {
     octx.globalCompositeOperation = 'source-over';
@@ -1916,23 +1938,38 @@ function drawInner() {
     drawBitmapVisible(ctx, tile.canvas, tile, vis);
     ctx.imageSmoothingEnabled = true;
   }
-  // Light: pink dots under ink via multiply on the board canvas.
-  // Dark: board canvas is CSS-inverted — draw ALL markers on overlay (not inverted).
+  // Bitmaps drawn (light PDF on white). Invert in-canvas for dark — no CSS filter
+  // (WebKit would allocate a second full-size buffer for invert+hue-rotate and OOM on iPhone).
+  // Plain invert via difference+white (no hue pass): fine for B/W assembly drawings.
   const darkUi = isDarkUi();
-  if (!darkUi) {
+  ctx.restore(); // back to CSS-pixel space (dpr transform only)
+
+  if (darkUi) {
     ctx.save();
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cssW, cssH);
+    ctx.restore();
+  }
+
+  // Dots on board canvas under plan lines: multiply (light) / screen after invert (dark).
+  ctx.save();
+  ctx.translate(state.pan.x, state.pan.y);
+  ctx.scale(state.zoom, state.zoom);
+  if (darkUi) {
+    drawPartDots(ctx); // sets screen + black halo internally
+  } else {
     ctx.globalCompositeOperation = 'multiply';
     drawPartDots(ctx);
-    ctx.restore();
   }
   ctx.restore();
 
+  // Overlay: crosshair / cal markers only (same in light and dark — not under plan ink).
   const mctx = octx || ctx;
   mctx.save();
   mctx.translate(state.pan.x, state.pan.y);
   mctx.scale(state.zoom, state.zoom);
   mctx.globalCompositeOperation = 'source-over';
-  if (darkUi) drawPartDots(mctx);
 
   // Calibration markers: only while placing reference points (not after cal is complete)
   if (!isCalibrated(state.cal, state.parts)) {
@@ -3401,7 +3438,7 @@ if ('serviceWorker' in navigator) {
 syncChromeOffset();
 
 
-// Live appearance switch: re-draw so markers move between board/overlay layers
+// Live appearance switch: re-draw (canvas invert + dot blend); reuse/free existing bitmaps
 try {
   const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
   const onScheme = () => {

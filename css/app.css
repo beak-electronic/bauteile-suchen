@@ -96,7 +96,7 @@ button, input { font: inherit; color: inherit; }
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.82);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   backdrop-filter: blur(12px) saturate(1.2);
 }
@@ -1386,7 +1386,7 @@ button, input { font: inherit; color: inherit; }
   }
 }
 
-/* ==== Open-app dark mode (chrome + inverted PDF; markers stay on overlay) ==== */
+/* ==== Open-app dark mode (chrome; plan inverted in canvas draw path) ==== */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0b0b0d;
@@ -1404,12 +1404,11 @@ button, input { font: inherit; color: inherit; }
   .board-wrap {
     background: #0b0b0d;
   }
-  /* Invert PDF/letterbox only — markers live on .board-overlay */
-  .board-canvas {
-    filter: invert(1) hue-rotate(180deg);
-  }
+  /* Plan inversion is done in canvas (difference+white) — no CSS filter (iOS memory).
+     Chrome frost must be opaque enough that board ink under the header does not
+     blur into grey vertical streaks (backdrop-filter sampling white plan lines). */
   .chrome::before {
-    background: rgba(28, 28, 30, 0.72);
+    background: rgba(28, 28, 30, 0.94);
   }
   .title { color: #f2f2f7; }
   .menu-btn,

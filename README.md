@@ -1,7 +1,7 @@
 # Bauteile Suchen
 
 Browser-PWA: Bauteil auf einem Bestückungsplan-PDF per pinkem Fadenkreuz finden.  
-Version **V1.5.6**. Lizenz: **GPLv3**.
+Version **V1.5.7**. Lizenz: **GPLv3**.
 
 Orientiert an der Kalibrierungs- und Pick & Place-Logik von Bestückungsplan (unabhängige App).
 
