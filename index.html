@@ -152,8 +152,9 @@
               <button type="button" class="btn block" id="menuVariantRemove">Variante entfernen</button>
               <button type="button" class="btn block" id="menuPnpReplace">Pick &amp; Place Werte mit Stückliste ersetzen (Kunden-Stückl. Referenz)</button>
               <div class="drawer-section">Stücklisten</div>
-              <button type="button" class="btn block" id="menuBomSmd">SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
-              <button type="button" class="btn block" id="menuBomBg">BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</button>
+              <p class="drawer-hint" id="menuBomHint">Bitte zuerst eine Bestückungsvariante wählen (nicht „Nur Bauteil Referenzen“).</p>
+              <button type="button" class="btn block menu-bom-btn" id="menuBomSmd" disabled><span class="menu-bom-label">SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</span><span class="menu-bom-file" id="menuBomSmdFile" hidden></span></button>
+              <button type="button" class="btn block menu-bom-btn" id="menuBomBg" disabled><span class="menu-bom-label">BG Stückl. laden (Lager-Stückl. Artikel-Bez.)</span><span class="menu-bom-file" id="menuBomBgFile" hidden></span></button>
               <div class="drawer-section">Kalibrierung</div>
               <button type="button" class="btn block" id="menuSetRef">Referenzpunkt setzen</button>
               <button type="button" class="btn block" id="menuMirrorCal">Kalibrierung spiegeln</button>
@@ -202,7 +203,7 @@
           <div class="empty-state" id="emptyState" hidden>
             <strong>Bauteile Suchen</strong>
             <div>Menü → Datei öffnen (Projekt .zip)<br />oder Erstellen → Editiermenü → Bestückungsplan PDF / Pick &amp; Place CSV laden</div>
-            <div class="empty-state-optional">Optional: Stücklisten → SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.) / BG Stückl. laden (Lager-Stückl. Artikel-Bez.) (zeigt Lagerplatz)</div>
+            <div class="empty-state-optional">Optional: Stücklisten → SMD BG Stückl. laden (Lager-Stückl. Artikel-Bez.) / BG Stückl. laden (Lager-Stückl. Artikel-Bez.) (je Bestückungsvariante, zeigt Lagerplatz)</div>
           </div>
         </div>
       </section>
@@ -246,7 +247,7 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.9</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.6.0</p>
           <button type="button" class="welcome-settings-btn" id="welcomeSettingsBtn" aria-label="Einstellungen" title="Einstellungen" hidden>
             <svg class="settings-icon" viewBox="0 0 120 120" width="40" height="40" aria-hidden="true" focusable="false">
               <g stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M29.5 38h60M29.5 60h60M29.5 81h60" /></g>

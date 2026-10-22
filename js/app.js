@@ -43,7 +43,7 @@ import {
   clearLinkedFolder,
 } from './folderLink.js';
 
-const VERSION = 'V1.5.9';
+const VERSION = 'V1.6.0';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -79,6 +79,11 @@ const el = {
   pnpReplaceInput: document.getElementById('pnpReplaceInput'),
   toast: document.getElementById('appToast'),
   searchLager: document.getElementById('searchLager'),
+  menuBomSmd: document.getElementById('menuBomSmd'),
+  menuBomBg: document.getElementById('menuBomBg'),
+  menuBomSmdFile: document.getElementById('menuBomSmdFile'),
+  menuBomBgFile: document.getElementById('menuBomBgFile'),
+  menuBomHint: document.getElementById('menuBomHint'),
   menuSetRef: document.getElementById('menuSetRef'),
   docTitle: document.getElementById('docTitle'),
   calBanner: document.getElementById('calNeededBanner'),
@@ -150,10 +155,8 @@ const state = {
   variantPickerMode: 'pick',
   /** After load, show picker once board+variants are ready (unless user already picked). */
   pendingVariantPick: false,
-  /** Stücklisten: { name, title, edv, entries:[{beak,key,lagerplatz,beschreibung}] } per source */
-  boms: { smd: null, bg: null },
-  /** @type {Map<string, {lagerplatz:string, beschreibung:string, source:'smd'|'bg'}>} BEAK key → Lager */
-  bomLookup: new Map(),
+  /* Stücklisten live per Bestückungsvariante: variant.boms = { smd, bg }
+     ({ name, title, edv, entries:[{beak,key,lagerplatz,beschreibung}] } or null). */
   /** @type {{ sourceName?: string, byRef: Record<string,{value:string,beak:string,key:string}> }|null} */
   pnpValueReplace: null,
 };
@@ -362,6 +365,7 @@ function updateVariantBar() {
   el.variantBar.hidden = true;
   if (!list.length) {
     if (el.variantCurrentBtn) el.variantCurrentBtn.textContent = '';
+    updateBomMenu();
     syncChromeOffset();
     return;
   }
@@ -372,6 +376,7 @@ function updateVariantBar() {
   if (el.variantCurrentBtn) {
     el.variantCurrentBtn.textContent = currentVariantLabel();
   }
+  updateBomMenu();
   syncChromeOffset();
 }
 
@@ -392,7 +397,7 @@ function renderVariantPickerButtons() {
         : 'Welche Baugruppe soll angezeigt werden?';
   }
 
-  const mk = (id, label, { primary = false, onClick } = {}) => {
+  const mk = (id, label, { primary = false, onClick, bomLine = null } = {}) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn welcome-btn variant-picker-btn' + (primary ? ' primary' : '');
@@ -400,6 +405,24 @@ function renderVariantPickerButtons() {
     if (mode === 'remove' && id) btn.classList.add('danger');
     btn.dataset.variantId = id || '';
     btn.textContent = label;
+    if (bomLine != null) {
+      btn.classList.add('has-bom-line');
+      const name = document.createElement('span');
+      name.className = 'variant-picker-name';
+      name.textContent = label;
+      const sub = document.createElement('span');
+      const missing = bomLine === 'keine Stückliste';
+      sub.className = 'variant-picker-bom' + (missing ? ' missing' : ' ok');
+      if (missing) {
+        sub.textContent = bomLine;
+      } else {
+        const check = document.createElement('span');
+        check.className = 'variant-picker-bom-check';
+        check.textContent = '✓';
+        sub.append(bomLine.replace(/\s*✓$/, '') + ' ', check);
+      }
+      btn.replaceChildren(name, sub);
+    }
     btn.addEventListener('click', onClick);
     el.variantPickerActions.appendChild(btn);
   };
@@ -433,6 +456,7 @@ function renderVariantPickerButtons() {
   for (const v of state.variants) {
     const label = variantDisplayName(v);
     mk(v.id, label, {
+      bomLine: variantBomStatus(v),
       onClick: () => {
         applyVariant(v.id);
         hideVariantPicker();
@@ -710,9 +734,39 @@ function updateCalSetBtn() {
   el.calSetBtn.style.top = `${Math.round(scr.y)}px`;
 }
 
+/** Active real Bestückungsvariante (null in „Nur Bauteil Referenzen“ / none loaded). */
+function activeRealVariant() {
+  if (!state.activeVariantId || isRefsOnlyMode()) return null;
+  return state.variants.find((v) => v.id === state.activeVariantId) || null;
+}
+
+/** Normalized { smd, bg } Stücklisten for one variant (nulls when missing). */
+function normalizeVariantBoms(boms) {
+  return { smd: normalizeBomList(boms?.smd), bg: normalizeBomList(boms?.bg) };
+}
+
+function variantHasBom(v) {
+  return !!(v?.boms?.smd || v?.boms?.bg);
+}
+
+/** Replace a variant's Stücklisten (drops its cached lookup). */
+function setVariantBoms(v, boms) {
+  if (!v) return;
+  v.boms = normalizeVariantBoms(boms);
+  v.bomLookup = null;
+}
+
+/** BEAK key → Lager map for one variant (SMD + BG combined; SMD wins). Cached per variant. */
+function variantBomLookup(v) {
+  if (!variantHasBom(v)) return null;
+  if (!(v.bomLookup instanceof Map)) v.bomLookup = buildBomLookup(v.boms);
+  return v.bomLookup;
+}
+
 function lagerForBeak(beak) {
-  if (!state.bomLookup.size) return '';
-  return state.bomLookup.get(beakKey(beak))?.lagerplatz || '';
+  const lookup = variantBomLookup(activeRealVariant());
+  if (!lookup?.size) return '';
+  return lookup.get(beakKey(beak))?.lagerplatz || '';
 }
 
 function partSearchLabel(p) {
@@ -721,13 +775,38 @@ function partSearchLabel(p) {
 }
 
 /**
- * Lagerplatz only in a real Bestückungsvariante with Stückliste — never in
- * „Nur Bauteil Referenzen“ (Stücklisten are project-wide, so gate on the view).
+ * Lagerplatz only when the active real Bestückungsvariante has its own
+ * Stückliste (SMD and/or BG) — never in „Nur Bauteil Referenzen“.
  */
 function activeVariantHasBom() {
-  if (!state.bomLookup.size) return false;
-  if (!state.activeVariantId || isRefsOnlyMode()) return false;
-  return state.variants.some((v) => v.id === state.activeVariantId);
+  return variantHasBom(activeRealVariant());
+}
+
+/** Picker BOM status: „Stückliste ✓“ when SMD-BG and/or BG list is loaded, else „keine Stückliste“. */
+function variantBomStatus(v) {
+  return variantHasBom(v) ? 'Stückliste ✓' : 'keine Stückliste';
+}
+
+/** Editiermenü → Stücklisten: enable only for a real variant; show its loaded files. */
+function updateBomMenu() {
+  const v = activeRealVariant();
+  if (el.menuBomHint) {
+    el.menuBomHint.textContent = v
+      ? `Für Variante: ${variantDisplayName(v)}`
+      : 'Bitte zuerst eine Bestückungsvariante wählen (nicht „Nur Bauteil Referenzen“).';
+    el.menuBomHint.classList.toggle('missing', !!v && !variantHasBom(v));
+  }
+  for (const [btn, file, src] of [
+    [el.menuBomSmd, el.menuBomSmdFile, 'smd'],
+    [el.menuBomBg, el.menuBomBgFile, 'bg'],
+  ]) {
+    if (btn) btn.disabled = !v;
+    if (!file) continue;
+    const list = v?.boms?.[src];
+    file.hidden = !v;
+    file.textContent = list ? `✓ ${list.name || 'geladen'}` : '– nicht geladen';
+    file.classList.toggle('loaded', !!list);
+  }
 }
 
 /** Lagerplatz text for a part from SMD + BG Stückliste ('' when none found / no BOM variant). */
@@ -769,17 +848,14 @@ function updateSearchLager() {
   fitSearchLabelFont();
 }
 
-function setBoms(boms) {
-  state.boms = {
-    smd: normalizeBomList(boms?.smd),
-    bg: normalizeBomList(boms?.bg),
-  };
-  state.bomLookup = buildBomLookup(state.boms);
-}
-
 async function onBomFile(file, source) {
   if (!file) return;
   const label = BOM_LABEL[source] || 'Stückliste';
+  const target = activeRealVariant();
+  if (!target) {
+    showToast('Bitte zuerst eine Bestückungsvariante wählen.', 5000);
+    return;
+  }
   try {
     let parsed;
     if (/\.csv$/i.test(file.name)) {
@@ -793,13 +869,17 @@ async function onBomFile(file, source) {
       return;
     }
     if (parsed.skipped?.length) console.warn(`${label}: nicht erkannte Zeilen`, parsed.skipped);
-    setBoms({
-      ...state.boms,
+    // Variant may have been switched/removed while parsing — load into the one chosen at click.
+    if (!state.variants.includes(target)) return;
+    setVariantBoms(target, {
+      ...(target.boms || {}),
       [source]: { name: file.name, title: parsed.title, edv: parsed.edv, entries: parsed.entries },
     });
-    persist();
+    updateBomMenu();
     updateSearchLager();
-    const msg = `${label} geladen: ${parsed.entries.length} Positionen` + (parsed.edv ? ` (${parsed.edv})` : '');
+    const msg =
+      `${label} geladen für ${variantDisplayName(target)}: ${parsed.entries.length} Positionen` +
+      (parsed.edv ? ` (${parsed.edv})` : '');
     setStatus(msg);
     showToast(msg);
   } catch (e) {
@@ -1008,7 +1088,6 @@ function persist() {
       cal: normalizeCal(state.cal),
       pdfName: state.pdfName,
       pnpName: state.pnpName,
-      stuecklisten: state.boms.smd || state.boms.bg ? state.boms : null,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (_) {}
@@ -1020,7 +1099,7 @@ function restoreMeta() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (data?.cal) state.cal = normalizeCal(data.cal);
-    if (data?.stuecklisten) setBoms(data.stuecklisten);
+    // Stücklisten are no longer kept in the browser (per variant in the project file).
   } catch (_) {}
 }
 
@@ -2194,7 +2273,6 @@ async function clearLoadedDocument() {
   state.crosshair = null;
   state.pendingFit = true;
   state.pendingVariantPick = false;
-  setBoms(null);
   if (el.search) el.search.value = '';
   if (el.suggestions) {
     el.suggestions.hidden = true;
@@ -2218,7 +2296,7 @@ async function closeDocument() {
 /** Fresh empty workspace (same as welcome „Neu“): clear any open doc, hide welcome. */
 async function startNewDocument() {
   openMenu(false);
-  // Nothing open (e.g. welcome „Neu“) → keep restored Stücklisten / cal from localStorage
+  // Nothing open (e.g. welcome „Neu“) → keep restored cal from localStorage
   if (hasProjectContent()) await clearLoadedDocument();
   state.welcomeDismissed = true;
   showWelcome(false);
@@ -2486,12 +2564,12 @@ async function saveProject() {
         name: v.name,
         pnpName: v.pnpName,
         pnpText: v.pnpText,
+        stuecklisten: variantHasBom(v) ? v.boms : null,
       })),
       activeVariantId: state.activeVariantId,
       cal: normalizeCal(state.cal),
       pageW: state.pageW,
       pageH: state.pageH,
-      stuecklisten: state.boms.smd || state.boms.bg ? state.boms : null,
       pnpValueReplace: state.pnpValueReplace,
     });
     const blob = await encryptProjectZip(innerZip, master);
@@ -2931,8 +3009,13 @@ async function openProjectFile(file, { handle = null } = {}) {
       // Default: first dropdown entry = Nur Bauteil Referenzen
       state.activeVariantId = state.variants.length ? REFS_ONLY_ID : null;
     }
-    // Stücklisten from project .zip replace current ones; older projects without → keep loaded lists
-    if (loaded.stuecklisten) setBoms(loaded.stuecklisten);
+    // Stücklisten: fully replaced by the project (no leftovers). V1.6.0+ → per variant;
+    // older files with project-wide lists → same lists for every variant; none → none.
+    loaded.variants.forEach((lv, i) => {
+      const v = state.variants[i];
+      if (!v) return;
+      setVariantBoms(v, loaded.bomsPerVariant ? lv.stuecklisten : loaded.stuecklisten);
+    });
     if (loaded.pnpValueReplace?.byRef) {
       state.pnpValueReplace = loaded.pnpValueReplace;
       applyPnpValueReplaceMap(loaded.pnpValueReplace.byRef, { sync: false });
@@ -3280,7 +3363,7 @@ document.getElementById('menuAbout').addEventListener('click', () => {
 Menü → Datei öffnen (Projekt .zip)
 oder Erstellen → Editiermenü → Bestückungsplan PDF / Pick & Place CSV laden
 Bestückungsvarianten: weitere Pick & Place CSV-Dateien hinzufügen
-Stücklisten (optional): Lagerplatz zur BEAK-Nr. im Suchfeld`);
+Stücklisten (optional, je Bestückungsvariante): Lagerplatz zur BEAK-Nr. im Suchfeld`);
 });
 if (el.btnZoomFit) {
   el.btnZoomFit.addEventListener('click', () => {
@@ -3419,11 +3502,13 @@ if (el.pnpReplaceInput) {
   });
 }
 document.getElementById('menuBomSmd')?.addEventListener('click', () => {
+  if (!activeRealVariant()) return;
   openMenu(false);
   bomFileSource = 'smd';
   el.bomInput?.click();
 });
 document.getElementById('menuBomBg')?.addEventListener('click', () => {
+  if (!activeRealVariant()) return;
   openMenu(false);
   bomFileSource = 'bg';
   el.bomInput?.click();

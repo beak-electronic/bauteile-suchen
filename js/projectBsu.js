@@ -4,7 +4,7 @@ import { normalizeCal } from './calibration.js';
 import { decodePnpBytes } from './pnp.js';
 
 export const PROJECT_JSON_NAME = 'projekt.json';
-export const BSU_VERSION = '1.3.0-bsu';
+export const BSU_VERSION = '1.6.0-bsu'; // 1.6.0: Stücklisten per variant
 
 function sanitizeName(n, fallback) {
   const s = (n || fallback).replace(/[\\/:*?"<>|]+/g, '_').trim();
@@ -47,7 +47,7 @@ function uniquePnpNames(variants) {
  *   pnpName?: string,
  *   pdfBytes?: ArrayBuffer|Uint8Array|null,
  *   pnpText?: string|null,
- *   variants?: Array<{ id?: string, name?: string, pnpName?: string, pnpText?: string }>,
+ *   variants?: Array<{ id?: string, name?: string, pnpName?: string, pnpText?: string, stuecklisten?: object|null }>,
  *   activeVariantId?: string|null,
  *   cal?: object,
  *   pageW?: number,
@@ -99,7 +99,13 @@ export async function buildBsuZip(project) {
       name: v.name || stemFromName(v.pnpName) || 'Variante',
       pnpName: v.pnpName,
       file: `source/variants/${v.pnpName}`,
+      // Stücklisten (parsed BEAK → Lagerplatz) per Bestückungsvariante
+      stuecklisten:
+        v.stuecklisten && (v.stuecklisten.smd || v.stuecklisten.bg)
+          ? { smd: v.stuecklisten.smd || null, bg: v.stuecklisten.bg || null }
+          : null,
     })),
+    bomsPerVariant: true,
     cal: normalizeCal(project.cal),
     pageW: project.pageW || 0,
     pageH: project.pageH || 0,
@@ -108,13 +114,6 @@ export async function buildBsuZip(project) {
       pnp: `source/${pnpName}`,
     },
   };
-  // Stücklisten (parsed BEAK → Lagerplatz), only when loaded
-  if (project.stuecklisten && (project.stuecklisten.smd || project.stuecklisten.bg)) {
-    meta.stuecklisten = {
-      smd: project.stuecklisten.smd || null,
-      bg: project.stuecklisten.bg || null,
-    };
-  }
   // Pick&Place value replacements from Kunden-Stückliste
   if (project.pnpValueReplace && project.pnpValueReplace.byRef) {
     meta.pnpValueReplace = project.pnpValueReplace;
@@ -266,6 +265,7 @@ export async function loadBsuZip(file) {
         name: mv.name || stemFromName(vName) || `Variante ${i + 1}`,
         pnpName: vName,
         pnpText: text,
+        stuecklisten: mv.stuecklisten || null,
       });
     }
   }
@@ -328,6 +328,8 @@ export async function loadBsuZip(file) {
     pageH: Number(meta.pageH) || 0,
     variants,
     activeVariantId: refsOnly ? '__refs_only__' : (active?.id || null),
+    // ≥1.6.0: per variant (variants[i].stuecklisten); older: project-wide list
+    bomsPerVariant: meta.bomsPerVariant === true,
     stuecklisten: meta.stuecklisten || null,
     pnpValueReplace: meta.pnpValueReplace || null,
   };

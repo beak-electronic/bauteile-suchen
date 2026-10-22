@@ -1,5 +1,5 @@
 Bauteile Suchen
-Version V1.5.9
+Version V1.6.0
 
 GitHub Pages: https://beak-electronic.github.io/bauteile-suchen/
 Repo: https://github.com/beak-electronic/bauteile-suchen
