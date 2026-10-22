@@ -1488,3 +1488,136 @@ button, input { font: inherit; color: inherit; }
   }
   .hit-info { color: #98989f; }
 }
+
+/* ==== Einstellungen (Windows-PC) — Button wie Geräte Laufzettel, Dialog wie Code-Dialog ==== */
+.welcome-settings-btn {
+  position: absolute; /* bottom-right in welcome card (like BEAK top-right) */
+  right: 10px;
+  bottom: 10px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.welcome-settings-btn[hidden] { display: none !important; }
+.welcome-settings-btn:active { opacity: 0.75; }
+.welcome-settings-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Regler only (no circle) — currentColor: dark on light, light on dark */
+.welcome-settings-btn { color: #505050; transition: color 0.15s ease; }
+.welcome-settings-btn:hover,
+.welcome-settings-btn:focus-visible { color: var(--accent); }
+.welcome-settings-btn .settings-icon {
+  width: 40px;
+  height: 40px;
+  display: block;
+  pointer-events: none;
+}
+
+.settings-card {
+  width: min(420px, 94vw);
+  max-height: min(92vh, 720px);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(26, 31, 39, 0.10);
+  flex-shrink: 0;
+}
+.settings-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1a1f27;
+}
+.settings-done {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+.settings-done:hover, .settings-done:focus-visible { text-decoration: underline; outline: none; }
+.settings-body {
+  padding: 14px 16px 18px;
+  overflow: auto;
+  min-height: 0;
+}
+.settings-section {
+  background: #f4f5f7;
+  border: 1px solid rgba(26, 31, 39, 0.08);
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+}
+.settings-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.settings-hint {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: #6b7280;
+}
+.settings-folder {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1a1f27;
+  word-break: break-word;
+}
+.settings-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.settings-btn-row .welcome-btn { min-height: 44px; white-space: nowrap; }
+.settings-btn-row .welcome-btn:not(.primary) {
+  background: #ffffff;
+  border: 1px solid rgba(26, 31, 39, 0.10);
+  color: #1a1f27;
+}
+.settings-btn-row .welcome-btn[hidden] { display: none !important; }
+.settings-btn-row:has(> [hidden]) { grid-template-columns: 1fr; }
+
+@media (prefers-color-scheme: dark) {
+  .welcome-settings-btn { color: #c7c7cc; }
+  .welcome-settings-btn:hover,
+  .welcome-settings-btn:focus-visible { color: #ff4da6; }
+  .settings-header { border-bottom-color: rgba(255, 255, 255, 0.10); }
+  .settings-title { color: #f2f2f7; }
+  .settings-done { color: #ff4da6; }
+  .settings-section {
+    background: #2c2c2e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .settings-section h3,
+  .settings-hint { color: #98989f; }
+  .settings-folder { color: #f2f2f7; }
+  .settings-btn-row .welcome-btn:not(.primary) {
+    background: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f2f2f7;
+  }
+}

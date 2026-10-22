@@ -1,5 +1,5 @@
 /* Bauteile Suchen service worker — cache shell for offline */
-const CACHE = 'bauteile-suchen-v1-5-8';
+const CACHE = 'bauteile-suchen-v1-5-9';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './js/projectBsu.js',
   './js/bom.js',
   './js/projectCrypto.js',
+  './js/folderLink.js',
   './vendor/jszip/jszip.min.js',
   './manifest.webmanifest',
   './icons/icon.svg',

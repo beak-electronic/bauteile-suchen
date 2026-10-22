@@ -246,7 +246,34 @@
             <button type="button" class="btn primary welcome-btn" id="welcomeOpenBtn">Öffnen</button>
             <button type="button" class="btn welcome-btn" id="welcomeNewBtn">Neu</button>
           </div>
-          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.8</p>
+          <p class="welcome-version" id="welcomeVersion">Bauteile Suchen · V1.5.9</p>
+          <button type="button" class="welcome-settings-btn" id="welcomeSettingsBtn" aria-label="Einstellungen" title="Einstellungen" hidden>
+            <svg class="settings-icon" viewBox="0 0 120 120" width="40" height="40" aria-hidden="true" focusable="false">
+              <g stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M29.5 38h60M29.5 60h60M29.5 81h60" /></g>
+              <g fill="currentColor"><circle cx="44" cy="38" r="9.5" /><circle cx="74" cy="60" r="9.5" /><circle cx="51" cy="81" r="9.5" /></g>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Einstellungen (nur Windows-PC, Chrome/Edge): verknüpfter Projektordner -->
+      <div class="code-dialog settings-dialog" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+        <div class="code-card settings-card">
+          <header class="settings-header">
+            <h2 class="settings-title" id="settingsTitle">Einstellungen</h2>
+            <button type="button" class="settings-done" id="settingsDone">Fertig</button>
+          </header>
+          <div class="settings-body">
+            <section class="settings-section">
+              <h3>Projektordner</h3>
+              <p class="settings-hint">Am Desktop (Chrome/Edge) kann ein Ordner dauerhaft verknüpft werden. Öffnen und Sichern starten dann in diesem Ordner.</p>
+              <p class="settings-folder" id="settingsFolderLabel">Kein Ordner verknüpft.</p>
+              <div class="settings-btn-row">
+                <button type="button" class="btn welcome-btn primary" id="settingsPickFolder">Ordner wählen</button>
+                <button type="button" class="btn welcome-btn" id="settingsClearFolder">Ordner lösen</button>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 

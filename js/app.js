@@ -36,8 +36,14 @@ import {
   isValidCode,
   sanitizeCodeInput,
 } from './projectCrypto.js';
+import {
+  folderSettingsAvailable,
+  getLinkedFolder,
+  pickLinkedFolder,
+  clearLinkedFolder,
+} from './folderLink.js';
 
-const VERSION = 'V1.5.8';
+const VERSION = 'V1.5.9';
 const ACCENT = '#dd007a'; // Bestückungsplan Sichern / --accent
 const WARN_ORANGE = '#f59e0b'; // wie Kalibrierungs-Banner / --warn-Familie
 const CURSOR_GRAY = '#9ca3af'; // manual click/tap crosshair (distinct from search pink)
@@ -714,9 +720,19 @@ function partSearchLabel(p) {
   return formatPartSearchLabel(p, { refsOnly: isRefsOnlyMode() });
 }
 
-/** Lagerplatz text for a part from SMD + BG Stückliste ('' when none found). */
+/**
+ * Lagerplatz only in a real Bestückungsvariante with Stückliste — never in
+ * „Nur Bauteil Referenzen“ (Stücklisten are project-wide, so gate on the view).
+ */
+function activeVariantHasBom() {
+  if (!state.bomLookup.size) return false;
+  if (!state.activeVariantId || isRefsOnlyMode()) return false;
+  return state.variants.some((v) => v.id === state.activeVariantId);
+}
+
+/** Lagerplatz text for a part from SMD + BG Stückliste ('' when none found / no BOM variant). */
 function lagerTextForPart(p) {
-  if (!p || !state.bomLookup.size) return '';
+  if (!p || !activeVariantHasBom()) return '';
   const places = [];
   for (const b of resolveBeakList(p)) {
     const lager = lagerForBeak(b);
@@ -2331,15 +2347,99 @@ async function writeBlobToHandle(handle, blob) {
   }
 }
 
+/**
+ * Run a file picker starting in the linked Projektordner (Einstellungen, Windows-PC).
+ * A stale/removed folder handle → retry once without startIn.
+ */
+async function withLinkedFolderStart(open) {
+  const folder = folderSettingsAvailable() ? await getLinkedFolder() : null;
+  if (!folder) return open({});
+  try {
+    return await open({ startIn: folder });
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    console.warn('Verknüpfter Ordner nicht nutzbar, Standardordner', e);
+    return open({});
+  }
+}
+
+// ---------------------------------------------------------------- Einstellungen (Windows-PC)
+const settingsEl = {
+  btn: document.getElementById('welcomeSettingsBtn'),
+  dlg: document.getElementById('settingsDialog'),
+  done: document.getElementById('settingsDone'),
+  label: document.getElementById('settingsFolderLabel'),
+  pick: document.getElementById('settingsPickFolder'),
+  clear: document.getElementById('settingsClearFolder'),
+};
+
+async function refreshSettingsFolder() {
+  const folder = await getLinkedFolder();
+  if (settingsEl.label) {
+    settingsEl.label.textContent = folder?.name
+      ? `Verknüpfter Ordner: ${folder.name}`
+      : 'Kein Ordner verknüpft.';
+  }
+  if (settingsEl.pick) settingsEl.pick.textContent = folder ? 'Ordner ändern' : 'Ordner wählen';
+  if (settingsEl.clear) settingsEl.clear.hidden = !folder;
+}
+
+function isSettingsOpen() {
+  return !!settingsEl.dlg && !settingsEl.dlg.hidden;
+}
+
+async function openSettings() {
+  if (!settingsEl.dlg || !folderSettingsAvailable()) return;
+  await refreshSettingsFolder();
+  settingsEl.dlg.hidden = false;
+  try { settingsEl.done?.focus(); } catch (_) {}
+}
+
+function closeSettings() {
+  if (!settingsEl.dlg) return;
+  settingsEl.dlg.hidden = true;
+  try { settingsEl.btn?.focus(); } catch (_) {}
+}
+
+function initSettings() {
+  if (!settingsEl.btn) return;
+  settingsEl.btn.hidden = !folderSettingsAvailable();
+  if (settingsEl.btn.hidden) return;
+  settingsEl.btn.addEventListener('click', () => void openSettings());
+  settingsEl.done?.addEventListener('click', closeSettings);
+  settingsEl.dlg?.addEventListener('click', (ev) => {
+    if (ev.target === settingsEl.dlg) closeSettings();
+  });
+  settingsEl.pick?.addEventListener('click', async () => {
+    try {
+      const folder = await pickLinkedFolder();
+      await refreshSettingsFolder();
+      showToast(`Ordner verknüpft: ${folder.name}`);
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      console.error(e);
+      showToast('Ordner konnte nicht gewählt werden: ' + (e.message || e), 6000);
+    }
+  });
+  settingsEl.clear?.addEventListener('click', async () => {
+    await clearLinkedFolder();
+    await refreshSettingsFolder();
+    showToast('Ordnerverknüpfung gelöst');
+  });
+}
+
 async function pickAndOpenProject() {
   openMenu(false);
   if (canOpenFilePicker()) {
     try {
-      const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: PROJECT_OPEN_TYPES,
-        excludeAcceptAllOption: false,
-      });
+      const [handle] = await withLinkedFolderStart((startIn) =>
+        window.showOpenFilePicker({
+          multiple: false,
+          types: PROJECT_OPEN_TYPES,
+          excludeAcceptAllOption: false,
+          ...startIn,
+        }),
+      );
       const file = await handle.getFile();
       await openProjectFile(file, { handle });
       return;
@@ -2427,11 +2527,14 @@ async function saveProject() {
     // New project / no handle: let user choose path (Windows/Chrome), else download.
     if (canSaveFilePicker()) {
       try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: fname,
-          types: PROJECT_SAVE_TYPES,
-          excludeAcceptAllOption: false,
-        });
+        const handle = await withLinkedFolderStart((startIn) =>
+          window.showSaveFilePicker({
+            suggestedName: fname,
+            types: PROJECT_SAVE_TYPES,
+            excludeAcceptAllOption: false,
+            ...startIn,
+          }),
+        );
         await writeBlobToHandle(handle, blob);
         state.openFileHandle = handle;
         state.openFileName = handle.name || fname;
@@ -3351,6 +3454,11 @@ if (el.variantCurrentBtn) {
 
 document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
+  if (isSettingsOpen()) {
+    closeSettings();
+    ev.preventDefault();
+    return;
+  }
   if (state.menuOpen && state.editMenuOpen) {
     showEditMenu(false);
     ev.preventDefault();
@@ -3372,6 +3480,7 @@ if (perfDebug) window.__planDebug = Object.assign(perfDebug, { state, PERF });
 
 // Boot
 restoreMeta();
+initSettings();
 syncShellToViewport();
 updateBadges();
 updateWelcome();
